@@ -71,7 +71,7 @@ public:
 	std::vector<Eigen::Vector3f> build_brick_voxel_position_list(uint32_t B) const { // brick size B^3
 		std::vector<Eigen::Vector3f> brick_pos;
 		brick_pos.resize(m_dual_nodes.size() * B * B * B);
-		float rstep = 1.f / (B - 1);
+		// float rstep = 1.f / (B - 1);
 		write_brick_voxel_positions(brick_pos.data(), B, 1.f, Eigen::Vector3f::Zero());
 		uint32_t last_level = 0;
 		uint32_t prev_ni = 0, ni = 0;

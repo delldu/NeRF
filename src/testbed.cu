@@ -120,7 +120,7 @@ void Testbed::update_imgui_paths() {
 	snprintf(m_imgui.cam_path_path, sizeof(m_imgui.cam_path_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_cam.json").c_str());
 	snprintf(m_imgui.extrinsics_path, sizeof(m_imgui.extrinsics_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_extrinsics.json").c_str());
 	snprintf(m_imgui.mesh_path, sizeof(m_imgui.mesh_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, ".obj").c_str());
-	snprintf(m_imgui.snapshot_path, sizeof(m_imgui.snapshot_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, ".ingp").c_str());
+	snprintf(m_imgui.snapshot_path, sizeof(m_imgui.snapshot_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, ".msgpack").c_str());
 	snprintf(m_imgui.video_path, sizeof(m_imgui.video_path), "%s", get_filename_in_data_path_with_suffix(m_data_path, m_network_config_path, "_video.mp4").c_str());
 }
 
@@ -236,7 +236,7 @@ fs::path Testbed::find_network_config(const fs::path& network_config_path) {
 }
 
 json Testbed::load_network_config(const fs::path& network_config_path) {
-	bool is_snapshot = equals_case_insensitive(network_config_path.extension(), "msgpack") || equals_case_insensitive(network_config_path.extension(), "ingp");
+	bool is_snapshot = equals_case_insensitive(network_config_path.extension(), "msgpack");
 	if (network_config_path.empty() || !network_config_path.exists()) {
 		throw std::runtime_error{fmt::format("Network {} '{}' does not exist.", is_snapshot ? "snapshot" : "config", network_config_path.str())};
 	}
@@ -246,13 +246,9 @@ json Testbed::load_network_config(const fs::path& network_config_path) {
 	json result;
 	if (is_snapshot) {
 		std::ifstream f{native_string(network_config_path), std::ios::in | std::ios::binary};
-		if (equals_case_insensitive(network_config_path.extension(), "ingp")) {
-			// zstr::ifstream applies zlib compression.
-			zstr::istream zf{f};
-			result = json::from_msgpack(zf);
-		} else {
-			result = json::from_msgpack(f);
-		}
+		// zstr::ifstream applies zlib compression.
+		zstr::istream zf{f};
+		result = json::from_msgpack(zf);
 		// we assume parent pointers are already resolved in snapshots.
 	} else if (equals_case_insensitive(network_config_path.extension(), "json")) {
 		std::ifstream f{native_string(network_config_path)};
@@ -316,7 +312,7 @@ void Testbed::load_file(const fs::path& path) {
 		return;
 	}
 
-	if (equals_case_insensitive(path.extension(), "ingp") || equals_case_insensitive(path.extension(), "msgpack")) {
+	if (equals_case_insensitive(path.extension(), "msgpack")) {
 		load_snapshot(path);
 		return;
 	}
@@ -1412,7 +1408,7 @@ void Testbed::imgui() {
 		ImGui::SameLine();
 		if (ImGui::Button("Save")) {
 			try {
-				save_snapshot(m_imgui.snapshot_path, m_include_optimizer_state_in_snapshot, m_compress_snapshot);
+				save_snapshot(m_imgui.snapshot_path, m_include_optimizer_state_in_snapshot);
 			} catch (std::exception& e) {
 				imgui_error_string = fmt::format("Failed to save snapshot: {}", e.what());
 				ImGui::OpenPopup("Error");
@@ -1435,16 +1431,6 @@ void Testbed::imgui() {
 		ImGui::SameLine();
 		ImGui::Checkbox("w/ optimizer state", &m_include_optimizer_state_in_snapshot);
 		ImGui::InputText("File##Snapshot file path", m_imgui.snapshot_path, sizeof(m_imgui.snapshot_path));
-		ImGui::SameLine();
-
-		bool can_compress = ends_with_case_insensitive(m_imgui.snapshot_path, ".ingp");
-
-		if (!can_compress) {
-			ImGui::BeginDisabled();
-			m_compress_snapshot = false;
-		}
-		ImGui::Checkbox("Compress", &m_compress_snapshot);
-		if (!can_compress) ImGui::EndDisabled();
 	}
 
 	if (m_testbed_mode == ETestbedMode::Nerf || m_testbed_mode == ETestbedMode::Sdf) {
@@ -4541,7 +4527,7 @@ void Testbed::gather_histograms() {
 // Increment this number when making a change to the snapshot format
 static const size_t SNAPSHOT_FORMAT_VERSION = 1;
 
-void Testbed::save_snapshot(const fs::path& path, bool include_optimizer_state, bool compress) {
+void Testbed::save_snapshot(const fs::path& path, bool include_optimizer_state) {
 	m_network_config["snapshot"] = m_trainer->serialize(include_optimizer_state);
 
 	auto& snapshot = m_network_config["snapshot"];
@@ -4592,13 +4578,9 @@ void Testbed::save_snapshot(const fs::path& path, bool include_optimizer_state, 
 
 	m_network_config_path = path;
 	std::ofstream f{native_string(m_network_config_path), std::ios::out | std::ios::binary};
-	if (equals_case_insensitive(m_network_config_path.extension(), "ingp")) {
-		// zstr::ofstream applies zlib compression.
-		zstr::ostream zf{f, zstr::default_buff_size, compress ? Z_DEFAULT_COMPRESSION : Z_NO_COMPRESSION};
-		json::to_msgpack(m_network_config, zf);
-	} else {
-		json::to_msgpack(m_network_config, f);
-	}
+	// zstr::ofstream applies zlib compression.
+	zstr::ostream zf{f, zstr::default_buff_size, Z_DEFAULT_COMPRESSION};
+	json::to_msgpack(m_network_config, zf);
 
 	tlog::success() << "Saved snapshot '" << path.str() << "'";
 }

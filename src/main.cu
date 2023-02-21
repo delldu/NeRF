@@ -27,6 +27,10 @@ using namespace tcnn;
 
 NGP_NAMESPACE_BEGIN
 
+float psnr(float x) {
+	return -10.f*logf(x)/logf(10.f);
+}
+
 int main_func(const std::vector<std::string>& arguments) {
 	ArgumentParser parser{
 		"Instant Neural Graphics Primitives\n"
@@ -37,7 +41,7 @@ int main_func(const std::vector<std::string>& arguments) {
 	HelpFlag help_flag{
 		parser,
 		"HELP",
-		"Display this help menu.",
+		"Display this help.",
 		{'h', "help"},
 	};
 
@@ -62,12 +66,14 @@ int main_func(const std::vector<std::string>& arguments) {
 		{"no-gui"},
 	};
 
+#ifdef NGP_GUI
 	Flag vr_flag{
 		parser,
 		"VR",
 		"Enables VR",
 		{"vr"}
 	};
+#endif
 
 	Flag no_train_flag{
 		parser,
@@ -83,11 +89,18 @@ int main_func(const std::vector<std::string>& arguments) {
 		{'s', "scene"},
 	};
 
-	ValueFlag<string> snapshot_flag{
+	ValueFlag<string> load_snapshot_flag{
 		parser,
 		"SNAPSHOT",
-		"Optional snapshot to load upon startup.",
-		{"snapshot", "load_snapshot"},
+		"Load snapshot upon startup.",
+		{"load_snapshot"},
+	};
+
+	ValueFlag<string> save_snapshot_flag{
+		parser,
+		"SNAPSHOT",
+		"Save snapshot to file at end.",
+		{"save_snapshot"},
 	};
 
 	ValueFlag<uint32_t> width_flag{
@@ -104,10 +117,31 @@ int main_func(const std::vector<std::string>& arguments) {
 		{"height"},
 	};
 
+	ValueFlag<int32_t> max_epoch_flag{
+		parser,
+		"MAX_EPOCH",
+		"Training stop if epoch >= max_epoch.",
+		{"max_epoch"},
+	};
+
+	ValueFlag<int32_t> max_time_flag{
+		parser,
+		"MAX_TIME",
+		"Training stop if time >= max_time.",
+		{"max_time"},
+	};
+
+	ValueFlag<float> max_psnr_flag{
+		parser,
+		"MAX_PSNR",
+		"Training stop if PSNR >= max_psnr.",
+		{"max_psnr"},
+	};
+
 	Flag version_flag{
 		parser,
 		"VERSION",
-		"Display the version of instant neural graphics primitives.",
+		"Display the version.",
 		{'v', "version"},
 	};
 
@@ -159,8 +193,11 @@ int main_func(const std::vector<std::string>& arguments) {
 		testbed.load_training_data(get(scene_flag));
 	}
 
-	if (snapshot_flag) {
-		testbed.load_snapshot(get(snapshot_flag));
+	if (load_snapshot_flag) {
+	    fs::path snapshot_path = get(load_snapshot_flag);
+	    if (snapshot_path.exists() && equals_case_insensitive(snapshot_path.extension(), "msgpack")) {
+			testbed.load_snapshot(snapshot_path);
+	    }
 	} else if (network_config_flag) {
 		testbed.reload_network_from_file(get(network_config_flag));
 	}
@@ -177,14 +214,43 @@ int main_func(const std::vector<std::string>& arguments) {
 		testbed.init_window(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080);
 	}
 
+#ifdef NGP_GUI
 	if (vr_flag) {
 		testbed.init_vr();
 	}
+#endif
 
 	// Render/training loop
+	float current_psnr = 0;
+	std::time_t start_time = std::time(nullptr);
+
 	while (testbed.frame()) {
-		if (!gui) {
-			tlog::info() << "iteration=" << testbed.m_training_step << " loss=" << testbed.m_loss_scalar.val();
+		current_psnr = psnr(testbed.m_loss_scalar.val());
+
+		if (! gui) {
+			tlog::info() << "iteration=" << testbed.m_training_step 
+				<< " loss=" << testbed.m_loss_scalar.val()
+				<< " psnr=" << current_psnr;
+		}
+
+		// Training stop condition
+		if (max_epoch_flag && testbed.m_training_step >= get(max_epoch_flag)) {
+			break;
+		}
+		if (max_psnr_flag && current_psnr >= get(max_psnr_flag)) {
+			break;
+		}
+		if (max_time_flag && (std::time(nullptr) - start_time) >= get(max_time_flag)) {
+			break;
+		}
+	}
+
+	if (save_snapshot_flag) {
+	    fs::path snapshot_path = get(save_snapshot_flag);
+		if (equals_case_insensitive(snapshot_path.extension(), "msgpack")) {
+			testbed.save_snapshot(snapshot_path, false /*optimize state*/);
+		} else {
+			tlog::warning() << "Snapshot file extension should be 'msgpack'";
 		}
 	}
 
@@ -207,6 +273,9 @@ int main(int argc, char* argv[]) {
 #else
 			arguments.emplace_back(argv[i]);
 #endif
+		}
+		if (argc == 1) {
+			arguments.emplace_back("--help");
 		}
 
 		return ngp::main_func(arguments);
