@@ -1,2 +1,2 @@
-./instant-ngp data/nerf/fox --load_snapshot="/tmp/fox.msgpack" --save_snapshot="/tmp/fox.msgpack"
+./instant-ngp data/nerf/fox --load_model="/tmp/fox.msgpack" --save_model="/tmp/fox.msgpack"
 

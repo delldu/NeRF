@@ -45,24 +45,17 @@ int main_func(const std::vector<std::string>& arguments) {
 		{'h', "help"},
 	};
 
-	ValueFlag<string> mode_flag{
+	Flag version_flag{
 		parser,
-		"MODE",
-		"Deprecated. Do not use.",
-		{'m', "mode"},
-	};
-
-	ValueFlag<string> network_config_flag{
-		parser,
-		"CONFIG",
-		"Path to the network config. Uses the scene's default if unspecified.",
-		{'n', 'c', "network", "config"},
+		"VERSION",
+		"Display version.",
+		{'v', "version"},
 	};
 
 	Flag no_gui_flag{
 		parser,
 		"NO_GUI",
-		"Disables the GUI and instead reports training progress on the command line.",
+		"Disable GUI.",
 		{"no-gui"},
 	};
 
@@ -70,7 +63,7 @@ int main_func(const std::vector<std::string>& arguments) {
 	Flag vr_flag{
 		parser,
 		"VR",
-		"Enables VR",
+		"Enable VR",
 		{"vr"}
 	};
 #endif
@@ -78,42 +71,49 @@ int main_func(const std::vector<std::string>& arguments) {
 	Flag no_train_flag{
 		parser,
 		"NO_TRAIN",
-		"Disables training on startup.",
+		"Disable training.",
 		{"no-train"},
+	};
+
+	ValueFlag<string> load_config_flag{
+		parser,
+		"CONFIG",
+		"Path to network config. Uses scene's default if unspecified.",
+		{"config"},
 	};
 
 	ValueFlag<string> scene_flag{
 		parser,
 		"SCENE",
 		"The scene to load. Can be NeRF dataset, a *.obj/*.stl mesh for training a SDF, an image, or a *.nvdb volume.",
-		{'s', "scene"},
+		{"scene"},
 	};
 
-	ValueFlag<string> load_snapshot_flag{
+	ValueFlag<string> load_model_flag{
 		parser,
-		"SNAPSHOT",
-		"Load snapshot upon startup.",
-		{"load_snapshot"},
+		"MODEL",
+		"Load model from *.msgpack file.",
+		{"load_model"},
 	};
 
-	ValueFlag<string> save_snapshot_flag{
+	ValueFlag<string> save_model_flag{
 		parser,
-		"SNAPSHOT",
-		"Save snapshot to file at end.",
-		{"save_snapshot"},
+		"MODEL",
+		"Save model to *.msgpack file.",
+		{"save_model"},
 	};
 
 	ValueFlag<uint32_t> width_flag{
 		parser,
 		"WIDTH",
-		"Resolution width of the GUI.",
+		"Resolution GUI width.",
 		{"width"},
 	};
 
 	ValueFlag<uint32_t> height_flag{
 		parser,
 		"HEIGHT",
-		"Resolution height of the GUI.",
+		"Resolution GUI height.",
 		{"height"},
 	};
 
@@ -127,7 +127,7 @@ int main_func(const std::vector<std::string>& arguments) {
 	ValueFlag<int32_t> max_time_flag{
 		parser,
 		"MAX_TIME",
-		"Training stop if time >= max_time.",
+		"Training stop if time >= max_time seconds.",
 		{"max_time"},
 	};
 
@@ -136,13 +136,6 @@ int main_func(const std::vector<std::string>& arguments) {
 		"MAX_PSNR",
 		"Training stop if PSNR >= max_psnr.",
 		{"max_psnr"},
-	};
-
-	Flag version_flag{
-		parser,
-		"VERSION",
-		"Display the version.",
-		{'v', "version"},
 	};
 
 	PositionalList<string> files{
@@ -155,7 +148,7 @@ int main_func(const std::vector<std::string>& arguments) {
 	// errors using exceptions.
 	try {
 		if (arguments.empty()) {
-			tlog::error() << "Number of arguments must be bigger than 0.";
+			tlog::error() << "Argument number must be > 0.";
 			return -3;
 		}
 
@@ -179,10 +172,6 @@ int main_func(const std::vector<std::string>& arguments) {
 		return 0;
 	}
 
-	if (mode_flag) {
-		tlog::warning() << "The '--mode' argument is no longer in use. It has no effect. The mode is automatically chosen based on the scene.";
-	}
-
 	Testbed testbed;
 
 	for (auto file : get(files)) {
@@ -193,13 +182,16 @@ int main_func(const std::vector<std::string>& arguments) {
 		testbed.load_training_data(get(scene_flag));
 	}
 
-	if (load_snapshot_flag) {
-	    fs::path snapshot_path = get(load_snapshot_flag);
-	    if (snapshot_path.exists() && equals_case_insensitive(snapshot_path.extension(), "msgpack")) {
-			testbed.load_snapshot(snapshot_path);
+	if (load_model_flag) {
+	    fs::path snapshot = get(load_model_flag);
+	    if (snapshot.exists() && equals_case_insensitive(snapshot.extension(), "msgpack")) {
+			testbed.load_snapshot(snapshot);
+	    } else {
+			tlog::warning() << "Model file should be '*.msgpack' and exists.";
 	    }
-	} else if (network_config_flag) {
-		testbed.reload_network_from_file(get(network_config_flag));
+	}
+	if (load_config_flag) {
+		testbed.reload_network_from_file(get(load_config_flag));
 	}
 
 	testbed.m_train = !no_train_flag;
@@ -224,7 +216,7 @@ int main_func(const std::vector<std::string>& arguments) {
 	float current_psnr = 0;
 	std::time_t start_time = std::time(nullptr);
 
-	while (testbed.frame()) {
+	while (testbed.m_train && testbed.frame()) {
 		current_psnr = psnr(testbed.m_loss_scalar.val());
 
 		if (! gui) {
@@ -245,12 +237,12 @@ int main_func(const std::vector<std::string>& arguments) {
 		}
 	}
 
-	if (save_snapshot_flag) {
-	    fs::path snapshot_path = get(save_snapshot_flag);
-		if (equals_case_insensitive(snapshot_path.extension(), "msgpack")) {
-			testbed.save_snapshot(snapshot_path, false /*optimize state*/);
+	if (save_model_flag) {
+	    fs::path snapshot = get(save_model_flag);
+		if (equals_case_insensitive(snapshot.extension(), "msgpack")) {
+			testbed.save_snapshot(snapshot, false /*include_optimizer_state*/);
 		} else {
-			tlog::warning() << "Snapshot file extension should be 'msgpack'";
+			tlog::warning() << "Model file should be '*.msgpack'.";
 		}
 	}
 
