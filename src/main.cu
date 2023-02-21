@@ -59,34 +59,34 @@ int main_func(const std::vector<std::string>& arguments) {
 		{"no-gui"},
 	};
 
-#ifdef NGP_GUI
-	Flag vr_flag{
+	ValueFlag<uint32_t> width_flag{
 		parser,
-		"VR",
-		"Enable VR",
-		{"vr"}
+		"WIDTH",
+		"Resolution GUI width.",
+		{"width"},
 	};
-#endif
 
-	Flag no_train_flag{
+	ValueFlag<uint32_t> height_flag{
 		parser,
-		"NO_TRAIN",
-		"Disable training.",
-		{"no-train"},
+		"HEIGHT",
+		"Resolution GUI height.\n",
+		{"height"},
 	};
+
+// #ifdef NGP_GUI
+// 	Flag vr_flag{
+// 		parser,
+// 		"VR",
+// 		"Enable VR",
+// 		{"vr"}
+// 	};
+// #endif
 
 	ValueFlag<string> load_config_flag{
 		parser,
 		"CONFIG",
-		"Path to network config. Uses scene's default if unspecified.",
+		"Network config file, using default if unspecified.",
 		{"config"},
-	};
-
-	ValueFlag<string> scene_flag{
-		parser,
-		"SCENE",
-		"The scene to load. Can be NeRF dataset, a *.obj/*.stl mesh for training a SDF, an image, or a *.nvdb volume.",
-		{"scene"},
 	};
 
 	ValueFlag<string> load_model_flag{
@@ -99,22 +99,22 @@ int main_func(const std::vector<std::string>& arguments) {
 	ValueFlag<string> save_model_flag{
 		parser,
 		"MODEL",
-		"Save model to *.msgpack file.",
+		"Save model to *.msgpack file.\n",
 		{"save_model"},
 	};
 
-	ValueFlag<uint32_t> width_flag{
+	ValueFlag<string> load_dataset_flag{
 		parser,
-		"WIDTH",
-		"Resolution GUI width.",
-		{"width"},
+		"DATASET",
+		"Load dataset. Can be NeRF dataset, a *.obj/*.stl mesh for training a SDF, an image, or a *.nvdb volume.\n",
+		{"dataset"},
 	};
 
-	ValueFlag<uint32_t> height_flag{
+	Flag no_train_flag{
 		parser,
-		"HEIGHT",
-		"Resolution GUI height.",
-		{"height"},
+		"NO_TRAIN",
+		"Disable training.",
+		{"no-train"},
 	};
 
 	ValueFlag<int32_t> max_epoch_flag{
@@ -134,14 +134,14 @@ int main_func(const std::vector<std::string>& arguments) {
 	ValueFlag<float> max_psnr_flag{
 		parser,
 		"MAX_PSNR",
-		"Training stop if PSNR >= max_psnr.",
+		"Training stop if PSNR >= max_psnr.\n",
 		{"max_psnr"},
 	};
 
 	PositionalList<string> files{
 		parser,
 		"files",
-		"Files to be loaded. Can be a scene, network config, snapshot, camera path, or a combination of those.",
+		"Files to be loaded. Can be a dataset, network config, snapshot, camera path, or a combination of those.",
 	};
 
 	// Parse command line arguments and react to parsing
@@ -172,14 +172,15 @@ int main_func(const std::vector<std::string>& arguments) {
 		return 0;
 	}
 
+	// Start ...
 	Testbed testbed;
 
 	for (auto file : get(files)) {
 		testbed.load_file(file);
 	}
 
-	if (scene_flag) {
-		testbed.load_training_data(get(scene_flag));
+	if (load_dataset_flag) {
+		testbed.load_training_data(get(load_dataset_flag));
 	}
 
 	if (load_model_flag) {
@@ -206,11 +207,11 @@ int main_func(const std::vector<std::string>& arguments) {
 		testbed.init_window(width_flag ? get(width_flag) : 1920, height_flag ? get(height_flag) : 1080);
 	}
 
-#ifdef NGP_GUI
-	if (vr_flag) {
-		testbed.init_vr();
-	}
-#endif
+// #ifdef NGP_GUI
+// 	if (vr_flag) {
+// 		testbed.init_vr();
+// 	}
+// #endif
 
 	// Render/training loop
 	float current_psnr = 0;
