@@ -4683,6 +4683,8 @@ void Testbed::load_snapshot(const fs::path& path) {
 	m_trainer->deserialize(m_network_config["snapshot"]);
 
 	set_all_devices_dirty();
+
+	m_train = true;
 }
 
 void Testbed::CudaDevice::set_nerf_network(const std::shared_ptr<NerfNetwork<precision_t>>& nerf_network) {
@@ -4793,6 +4795,17 @@ bool Testbed::loop_animation() {
 
 void Testbed::set_loop_animation(bool value) {
 	m_camera_path.loop = value;
+}
+
+void Testbed::save_point_cloud(const char* filename) {
+	// compute_and_save_marching_cubes_mesh	
+
+	if (m_testbed_mode != ETestbedMode::Nerf && m_testbed_mode != ETestbedMode::Sdf) {
+		// tlog::warning() << "Save point cloud only for NeRF or SDF.";
+		return;
+	}
+
+	tlog::info() << "Save point cloud to " << filename << " ...";
 }
 
 NGP_NAMESPACE_END

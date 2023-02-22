@@ -496,6 +496,7 @@ public:
 
 	float compute_image_mse(bool quantize_to_byte);
 
+	void save_point_cloud(const char* filename);
 	void compute_and_save_marching_cubes_mesh(const char* filename, Eigen::Vector3i res3d = Eigen::Vector3i::Constant(128), BoundingBox aabb = {}, float thresh = 2.5f, bool unwrap_it = false);
 	Eigen::Vector3i compute_and_save_png_slices(const char* filename, int res, BoundingBox aabb = {}, float thresh = 2.5f, float density_range = 4.f, bool flip_y_and_z_axes = false);
 
@@ -907,8 +908,8 @@ public:
 	int m_visualized_dimension = -1;
 	int m_visualized_layer = 0;
 
-	struct View {
-		std::shared_ptr<CudaRenderBuffer> render_buffer;
+	struct View { // xxxx8888
+		std::shared_ptr<CudaRenderBuffer> render_buffer; // xxxx8888
 		Eigen::Vector2i full_resolution = {1, 1};
 		int visualized_dimension = 0;
 

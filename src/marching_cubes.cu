@@ -948,6 +948,7 @@ void save_mesh(
 		}
 	}
 	fclose(f);
+	tlog::success() << "Save mesh to " << path.str();
 }
 
 void save_density_grid_to_png(const GPUMemory<float>& density, const fs::path& path, Vector3i res3d, float thresh, bool swap_y_z, float density_range) {

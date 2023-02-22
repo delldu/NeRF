@@ -732,6 +732,7 @@ __global__ void compute_nerf_rgba(const uint32_t n_elements, Array4f* network_ou
 	network_output[i] = rgba;
 }
 
+// xxxx8888
 __global__ void generate_next_nerf_network_inputs(
 	const uint32_t n_elements,
 	BoundingBox render_aabb,
@@ -851,7 +852,7 @@ __global__ void composite_kernel_nerf(
 		float T = 1.f - local_rgba.w();
 		float dt = unwarp_dt(input->dt);
 		float alpha = 1.f - __expf(-network_to_density(float(local_network_output[3]), density_activation) * dt);
-		if (show_accel >= 0) {
+		if (show_accel >= 0) { // show_accel == -1 ？
 			alpha = 1.f;
 		}
 		float weight = alpha * T;
@@ -963,7 +964,7 @@ __global__ void composite_kernel_nerf(
 			Vector3f normal = -network_to_density_derivative(float(local_network_output[3]), density_activation) * warped_pos;
 			rgb = normal.normalized().array();
 		} else if (render_mode == ERenderMode::Positions) {
-			if (show_accel >= 0) {
+			if (show_accel >= 0) { // show_accel == -1 ？
 				uint32_t mip = max(show_accel, mip_from_pos(pos));
 				uint32_t res = NERF_GRIDSIZE() >> mip;
 				int ix = pos.x() * res;
@@ -1773,6 +1774,7 @@ __global__ void shade_kernel_nerf(
 	}
 }
 
+// xxxx8888
 __global__ void compact_kernel_nerf(
 	const uint32_t n_elements,
 	Array4f* src_rgba, float* src_depth, NerfPayload* src_payloads,
@@ -1906,6 +1908,7 @@ __global__ void init_rays_with_payload_kernel_nerf(
 		payload.alive = false;
 		return;
 	}
+	// init_rays_from_camera xxxx8888
 
 	payload.origin = ray.o;
 	payload.dir = ray.d;
@@ -2010,6 +2013,9 @@ void Testbed::NerfTracer::init_rays_from_camera(
 	ERenderMode render_mode,
 	cudaStream_t stream
 ) {
+	// xxxx8888
+	tlog::info() << "init_rays_from_camera() ............... ";
+
 	// Make sure we have enough memory reserved to render at the requested resolution
 	size_t n_pixels = (size_t)resolution.x() * resolution.y();
 	enlarge(n_pixels, padded_output_width, n_extra_dims, stream);
@@ -2018,7 +2024,7 @@ void Testbed::NerfTracer::init_rays_from_camera(
 	const dim3 blocks = { div_round_up((uint32_t)resolution.x(), threads.x), div_round_up((uint32_t)resolution.y(), threads.y), 1 };
 	init_rays_with_payload_kernel_nerf<<<blocks, threads, 0, stream>>>(
 		sample_index,
-		m_rays[0].payload,
+		m_rays[0].payload, // xxxx8888
 		resolution,
 		focal_length,
 		camera_matrix0,
@@ -2061,6 +2067,7 @@ void Testbed::NerfTracer::init_rays_from_camera(
 	);
 }
 
+// xxxx8888
 uint32_t Testbed::NerfTracer::trace(
 	NerfNetwork<network_precision_t>& network,
 	const BoundingBox& render_aabb,
@@ -2093,6 +2100,10 @@ uint32_t Testbed::NerfTracer::trace(
 	// m_n_rays_initialized = 0;
 
 	uint32_t i = 1;
+
+	// xxxx8888
+	tlog::info() << "Testbed::NerfTracer::trace() ...............................";
+
 	uint32_t double_buffer_index = 0;
 	while (i < MARCH_ITER) {
 		RaysNerfSoa& rays_current = m_rays[(double_buffer_index + 1) % 2];
@@ -2102,6 +2113,7 @@ uint32_t Testbed::NerfTracer::trace(
 		// Compact rays that did not diverge yet
 		{
 			CUDA_CHECK_THROW(cudaMemsetAsync(m_alive_counter, 0, sizeof(uint32_t), stream));
+			// xxxx8888
 			linear_kernel(compact_kernel_nerf, 0, stream,
 				n_alive,
 				rays_tmp.rgba, rays_tmp.depth, rays_tmp.payload,
@@ -2123,6 +2135,8 @@ uint32_t Testbed::NerfTracer::trace(
 
 		uint32_t extra_stride = network.n_extra_dims() * sizeof(float);
 		PitchedPtr<NerfCoordinate> input_data((NerfCoordinate*)m_network_input, 1, 0, extra_stride);
+
+		// xxxx8888
 		linear_kernel(generate_next_nerf_network_inputs, 0, stream,
 			n_alive,
 			render_aabb,
@@ -2141,6 +2155,8 @@ uint32_t Testbed::NerfTracer::trace(
 		uint32_t n_elements = next_multiple(n_alive * n_steps_between_compaction, tcnn::batch_size_granularity);
 		GPUMatrix<float> positions_matrix((float*)m_network_input, (sizeof(NerfCoordinate) + extra_stride) / sizeof(float), n_elements);
 		GPUMatrix<network_precision_t, RM> rgbsigma_matrix((network_precision_t*)m_network_output, network.padded_output_width(), n_elements);
+
+		// xxxx8888		
 		network.inference_mixed_precision(stream, positions_matrix, rgbsigma_matrix);
 
 		if (render_mode == ERenderMode::Normals) {
@@ -2148,7 +2164,7 @@ uint32_t Testbed::NerfTracer::trace(
 		} else if (render_mode == ERenderMode::EncodingVis) {
 			network.visualize_activation(stream, visualized_layer, visualized_dim, positions_matrix, positions_matrix);
 		}
-
+		// xxxx8888
 		linear_kernel(composite_kernel_nerf, 0, stream,
 			n_alive,
 			n_elements,
@@ -2208,6 +2224,7 @@ void Testbed::NerfTracer::enlarge(size_t n_elements, uint32_t padded_output_widt
 
 	m_rays[0].set(std::get<0>(scratch), std::get<1>(scratch), std::get<2>(scratch), n_elements);
 	m_rays[1].set(std::get<3>(scratch), std::get<4>(scratch), std::get<5>(scratch), n_elements);
+	// xxxx8888
 	m_rays_hit.set(std::get<6>(scratch), std::get<7>(scratch), std::get<8>(scratch), n_elements);
 
 	m_network_output = std::get<9>(scratch);
@@ -2276,6 +2293,8 @@ void Testbed::render_nerf(
 	if (m_render_mode == ERenderMode::Slice) {
 		plane_z = -plane_z;
 	}
+	// xxxx8888
+	tlog::info() << "render_nerf() ............... ";
 
 	ERenderMode render_mode = visualized_dimension > -1 ? ERenderMode::EncodingVis : m_render_mode;
 
@@ -2323,6 +2342,7 @@ void Testbed::render_nerf(
 		n_hit = tracer.n_rays_initialized();
 	} else {
 		float depth_scale = 1.0f / m_nerf.training.dataset.scale;
+		// xxxx8888
 		n_hit = tracer.trace(
 			nerf_network,
 			m_render_aabb,
@@ -2378,6 +2398,9 @@ void Testbed::render_nerf(
 		);
 		return;
 	}
+
+	// xxxx8888
+	tlog::info() << "render_nerf() ............... n_hit = " << n_hit;
 
 	linear_kernel(shade_kernel_nerf, 0, stream,
 		n_hit,
