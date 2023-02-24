@@ -62,7 +62,6 @@ struct RaysNerfSoa {
 };
 
 //#define TRIPLANAR_COMPATIBLE_POSITIONS   // if this is defined, then positions are stored as [x,y,z,x] so that it can be split as [x,y] [y,z] [z,x] by the input encoding
-
 struct NerfPosition {
 	NGP_HOST_DEVICE NerfPosition(const Eigen::Vector3f& pos, float dt)
 	:
@@ -84,6 +83,7 @@ struct NerfDirection {
 
 struct NerfCoordinate {
 	NGP_HOST_DEVICE NerfCoordinate(const Eigen::Vector3f& pos, const Eigen::Vector3f& dir, float dt) : pos{pos, dt}, dt{dt}, dir{dir, dt} {}
+	// xxxx9999	
 	NGP_HOST_DEVICE void set_with_optional_extra_dims(const Eigen::Vector3f& pos, const Eigen::Vector3f& dir, float dt, const float* extra_dims, uint32_t stride_in_bytes) {
 		this->dt = dt;
 		this->pos = NerfPosition(pos, dt);
@@ -106,7 +106,7 @@ struct NerfCoordinate {
 	}
 
 	NerfPosition pos;
-	float dt;
+	float dt; // xxxx9999 dt_sum ?
 	NerfDirection dir;
 };
 

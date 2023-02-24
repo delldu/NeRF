@@ -94,12 +94,14 @@ void save_point(Testbed &testbed, fs::path &filename)
 		return;
     }
 
-	if (testbed.m_testbed_mode != ETestbedMode::Nerf && 
-		testbed.m_testbed_mode != ETestbedMode::Sdf) {
-		tlog::warning() << "Save point cloud only for NeRF or SDF.";
+	if (testbed.m_testbed_mode != ETestbedMode::Nerf) {
+		tlog::warning() << "Save point cloud only for NeRF.";
 		return;
 	}
-	testbed.save_point_cloud(filename.str().c_str());
+
+	testbed.get_nerf_rays_from_image(5);
+	
+	testbed.save_nerf_point_cloud(filename.str().c_str());
 }
 
 
@@ -185,7 +187,7 @@ int main_func(const std::vector<std::string>& arguments) {
 	ValueFlag<string> save_point_flag{
 		parser,
 		"FILE_NAME",
-		"Save point cloud to *.ply file for NeRF or SDF.",
+		"Save point cloud to *.ply file for NeRF.",
 		{"save_point"},
 	};
 

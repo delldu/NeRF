@@ -492,7 +492,7 @@ void Testbed::set_train(bool mtrain) {
 
 void Testbed::compute_and_save_marching_cubes_mesh(const char* filename, Vector3i res3d , BoundingBox aabb, float thresh, bool unwrap_it) {
 	Matrix3f render_aabb_to_local = Matrix3f::Identity();
-	if (aabb.is_empty()) {
+	if (aabb.is_empty()) { // true
 		aabb = m_testbed_mode == ETestbedMode::Nerf ? m_render_aabb : m_aabb;
 		render_aabb_to_local = m_render_aabb_to_local;
 	}
@@ -1471,7 +1471,7 @@ void Testbed::imgui() {
 					// Depth of 0.01f is arbitrarily chosen to produce a visually interpretable range of alpha values.
 					// Alternatively, if the true transparency of a given voxel is desired, one could use the voxel size,
 					// the voxel diagonal, or some form of expected ray length through the voxel, given random directions.
-					GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, 0.01f);
+					GPUMemory<Array4f> rgba = get_rgba_on_grid(res3d, effective_view_dir, true, 0.01f, false);
 					auto dir = m_data_path / "rgba_slices";
 					if (!dir.exists()) {
 						fs::create_directory(dir);
@@ -4797,13 +4797,18 @@ void Testbed::set_loop_animation(bool value) {
 	m_camera_path.loop = value;
 }
 
-void Testbed::save_point_cloud(const char* filename) {
+void Testbed::save_nerf_point_cloud(const char* filename) {
 	// compute_and_save_marching_cubes_mesh	
 
-	if (m_testbed_mode != ETestbedMode::Nerf && m_testbed_mode != ETestbedMode::Sdf) {
+	if (m_testbed_mode != ETestbedMode::Nerf) {
 		// tlog::warning() << "Save point cloud only for NeRF or SDF.";
 		return;
 	}
+	// get_density_on_grid
+	// get_rgba_on_grid
+
+	
+
 
 	tlog::info() << "Save point cloud to " << filename << " ...";
 }

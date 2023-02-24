@@ -262,6 +262,11 @@ with z=1
 
 edges 8-11 go in +z direction from vertex 0-3
 */
+
+// inline __host__ __device__ float get_verts_offset(float thresh, float prevf, float nextf) {
+// 	return (thresh - prevf)/(nextf - prevf);
+// }
+
 __global__ void gen_vertices(BoundingBox render_aabb, Matrix3f render_aabb_to_local, Vector3i res_3d, const float* __restrict__ density, int*__restrict__ vertidx_grid, Vector3f* verts_out, float thresh, uint32_t* __restrict__ counters) {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
