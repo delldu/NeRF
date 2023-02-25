@@ -457,7 +457,7 @@ inline NGP_HOST_DEVICE Ray uv_to_ray(
 	const Eigen::Vector2f& screen_center,
 	const Eigen::Vector3f& parallax_shift = Eigen::Vector3f::Zero(),
 	float near_distance = 0.0f,
-	float focus_z = 1.0f,
+	float focus_z = 1.0f, // plane_z -- 1.36364
 	float aperture_size = 0.0f,
 	const Foveation& foveation = {},
 	Buffer2DView<const uint8_t> hidden_area_mask = {},
@@ -511,6 +511,9 @@ inline NGP_HOST_DEVICE Ray uv_to_ray(
 		origin += camera_matrix.block<3, 2>(0, 0) * blur;
 		dir = (lookat - origin) / focus_z;
 	}
+	// printf("screen_center.x() = %.2f, screen_center.y() = %.2f, near_distance = %0.2f \n",
+	// 	screen_center.x(), screen_center.y(), near_distance);
+	// screen_center.x() = 0.50, screen_center.y() = 0.50, near_distance = 0.00 
 
 	origin += dir * near_distance;
 	return {origin, dir};
@@ -914,5 +917,6 @@ Eigen::Matrix<float, 3, 4> log_space_lerp(const Eigen::Matrix<float, 3, 4>& begi
 
 tcnn::GPUMemory<float> load_exr_gpu(const fs::path& path, int* width, int* height);
 tcnn::GPUMemory<float> load_stbi_gpu(const fs::path& path, int* width, int* height);
+void save_stbi_gpu(const fs::path& filename, int width, int height, const tcnn::GPUMemory<Eigen::Array4f>& rgba);
 
 NGP_NAMESPACE_END

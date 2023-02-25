@@ -83,7 +83,6 @@ struct NerfDirection {
 
 struct NerfCoordinate {
 	NGP_HOST_DEVICE NerfCoordinate(const Eigen::Vector3f& pos, const Eigen::Vector3f& dir, float dt) : pos{pos, dt}, dt{dt}, dir{dir, dt} {}
-	// xxxx9999	
 	NGP_HOST_DEVICE void set_with_optional_extra_dims(const Eigen::Vector3f& pos, const Eigen::Vector3f& dir, float dt, const float* extra_dims, uint32_t stride_in_bytes) {
 		this->dt = dt;
 		this->pos = NerfPosition(pos, dt);

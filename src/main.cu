@@ -89,7 +89,7 @@ void save_mesh(Testbed &testbed, fs::path &filename)
 
 void save_point(Testbed &testbed, fs::path &filename)
 {
-    if (! file_like(filename, "ply")) {
+    if (! file_like(filename, "png")) {
 		tlog::warning() << "Point cloud should be *.ply file.";
 		return;
     }
@@ -99,9 +99,11 @@ void save_point(Testbed &testbed, fs::path &filename)
 		return;
 	}
 
-	testbed.get_nerf_rays_from_image(5);
+	// testbed.get_nerf_rays_from_image(5);
 	
-	testbed.save_nerf_point_cloud(filename.str().c_str());
+	// testbed.save_nerf_point_cloud(filename.str().c_str());
+
+	testbed.render_nerf_image(0, filename);
 }
 
 

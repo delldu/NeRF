@@ -1073,6 +1073,7 @@ void save_rgba_grid_to_png_sequence(const GPUMemory<Array4f>& rgba, const fs::pa
 	tlog::success() << "Wrote RGBA PNG sequence to " << path;
 }
 
+
 void save_rgba_grid_to_raw_file(const GPUMemory<Array4f>& rgba, const fs::path& path, Vector3i res3d, bool swap_y_z, int cascade) {
 	std::vector<Array4f> rgba_cpu;
 	rgba_cpu.resize(rgba.size());

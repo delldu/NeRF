@@ -18,6 +18,7 @@
 #include <unsupported/Eigen/MatrixFunctions>
 
 #include <stb_image/stb_image.h>
+#include <stb_image/stb_image_write.h>
 
 using namespace Eigen;
 using namespace tcnn;
@@ -78,5 +79,29 @@ GPUMemory<float> load_stbi_gpu(const fs::path& path, int* width, int* height) {
 
 	return result;
 }
+
+void save_stbi_gpu(const fs::path& filename, int width, int height, const GPUMemory<Array4f>& rgba) {
+	std::vector<Array4f> rgba_cpu;
+	rgba_cpu.resize(rgba.size());
+	rgba.copy_to_host(rgba_cpu);
+
+	uint8_t* pngpixels = (uint8_t*)malloc(size_t(width) * size_t(height) * 4);
+	uint8_t* dst = pngpixels;
+	for (int y = 0; y < height; ++y) {
+		for (int x = 0; x < width; ++x) {
+			size_t i = x + y*width;
+			*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].x() * 255.f, 0.f, 255.f);
+			*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].y() * 255.f, 0.f, 255.f);
+			*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].z() * 255.f, 0.f, 255.f);
+			*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].w() * 255.f, 0.f, 255.f);
+		}
+	}
+
+	write_stbi(filename, width, height, 4, pngpixels);
+	free(pngpixels);
+
+	tlog::success() << "Save RGBA to " << filename;
+}
+
 
 NGP_NAMESPACE_END
