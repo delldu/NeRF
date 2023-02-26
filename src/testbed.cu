@@ -4799,20 +4799,60 @@ void Testbed::set_loop_animation(bool value) {
 	m_camera_path.loop = value;
 }
 
-void Testbed::save_nerf_point_cloud(const char* filename) {
-	// compute_and_save_marching_cubes_mesh	
-
+void Testbed::save_nerf_point_cloud(float ratio, const char* filename) {
 	if (m_testbed_mode != ETestbedMode::Nerf) {
-		// tlog::warning() << "Save point cloud only for NeRF or SDF.";
+		tlog::warning() << "Save point cloud only for NeRF.";
 		return;
 	}
-	// get_density_on_grid
-	// get_rgba_on_grid
 
-	
+	std::vector<NerfPointCloud> cpu_points = get_nerf_points_from_image(100);
 
+	FILE* f = native_fopen(filename, "wb");
+	if (!f) {
+		throw std::runtime_error{fmt::format("Failed to open '{}' for writing", filename)};
+	}
+
+	fprintf(f,
+		"ply\n"
+		"format ascii 1.0\n"
+		"comment output from https://github.com/NVlabs/instant-ngp\n"
+		"element vertex %u\n"
+		"property float x\n"
+		"property float y\n"
+		"property float z\n"
+		"property uchar red\n"
+		"property uchar green\n"
+		"property uchar blue\n"
+		"element face 0\n"
+		"property list uchar int vertex_index\n"
+		"end_header\n"
+		, (unsigned int)cpu_points.size()
+	);
+
+	for (size_t i=0; i < cpu_points.size(); ++i) {
+		Vector3f p = cpu_points[i].pos;
+		Vector4f c = cpu_points[i].rgba;
+
+		unsigned char c8[3] = {(unsigned char)tcnn::clamp(c.x()*255.f,0.f,255.f),
+			(unsigned char)tcnn::clamp(c.y()*255.f,0.f,255.f),
+			(unsigned char)tcnn::clamp(c.z()*255.f,0.f,255.f)};
+
+		if (i % 100 == 0) {
+			std::cout << "pos: " << p << std::endl;
+			std::cout << "rgba:" << c << std::endl;
+		}
+
+		fprintf(f, "%0.5f %0.5f %0.5f %d %d %d\n", p.x(), p.y(), p.z(), c8[0], c8[1], c8[2]);
+	}
+
+	fclose(f);
 
 	tlog::info() << "Save point cloud to " << filename << " ...";
+}
+
+std::string Testbed::gpu_memory_used() {
+	size_t n_bytes = tcnn::total_n_bytes_allocated() + g_total_n_bytes_allocated;
+	return bytes_to_string(n_bytes).c_str();
 }
 
 NGP_NAMESPACE_END

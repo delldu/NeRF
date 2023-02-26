@@ -109,4 +109,9 @@ struct NerfCoordinate {
 	NerfDirection dir;
 };
 
+struct NerfPointCloud {
+	Eigen::Vector3f pos;
+	Eigen::Vector4f rgba;
+};
+
 NGP_NAMESPACE_END

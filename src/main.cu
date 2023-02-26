@@ -87,9 +87,25 @@ void save_mesh(Testbed &testbed, fs::path &filename)
 		Eigen::Vector3i{256, 256, 256}, {} /*BoundingBox*/, thresh, uv_flag);
 }
 
-void save_point(Testbed &testbed, fs::path &filename)
+void save_image(Testbed &testbed, int k, fs::path &filename)
 {
     if (! file_like(filename, "png")) {
+		tlog::warning() << "Output image should be *.png file.";
+		return;
+    }
+
+	if (testbed.m_testbed_mode != ETestbedMode::Nerf) {
+		tlog::warning() << "Save image only for NeRF.";
+		return;
+	}
+
+	testbed.save_nerf_image(k, filename);
+}
+
+
+void save_point(Testbed &testbed, float ratio, fs::path &filename)
+{
+    if (! file_like(filename, "ply")) {
 		tlog::warning() << "Point cloud should be *.ply file.";
 		return;
     }
@@ -99,18 +115,13 @@ void save_point(Testbed &testbed, fs::path &filename)
 		return;
 	}
 
-	// testbed.get_nerf_rays_from_image(5);
-	
-	// testbed.save_nerf_point_cloud(filename.str().c_str());
-
-	testbed.render_nerf_image(0, filename);
+	testbed.save_nerf_point_cloud(ratio, filename.str().c_str());
 }
 
 
 int main_func(const std::vector<std::string>& arguments) {
 	ArgumentParser parser{
-		"Instant Neural Graphics Primitives\n"
-		"Version " NGP_VERSION,
+		"Instant Neural Graphics Primitives Version " NGP_VERSION,
 		"",
 	};
 
@@ -160,44 +171,51 @@ int main_func(const std::vector<std::string>& arguments) {
 
 	ValueFlag<string> load_config_flag{
 		parser,
-		"FILE_NAME",
-		"Load net config from *.json file.",
+		"CONFIG_FILE",
+		"Load network config from *.json file.",
 		{"load_config"},
 	};
 
 	ValueFlag<string> load_model_flag{
 		parser,
-		"FILE_NAME",
+		"MODEL_FILE",
 		"Load model from *.msgpack file.",
 		{"load_model"},
 	};
 
+	ValueFlag<string> load_data_flag{
+		parser,
+		"DATASET_NAME",
+		"Load training data from dataset (Folder for NeRF, *.obj/*.stl for SDF, *.nvdb for volume, others for image ).",
+		{"load_data"},
+	};
+
 	ValueFlag<string> save_model_flag{
 		parser,
-		"FILE_NAME",
+		"MODEL_FILE",
 		"Save model to *.msgpack file.",
 		{"save_model"},
 	};
 
 	ValueFlag<string> save_mesh_flag{
 		parser,
-		"FILE_NAME",
-		"Save mesh to *.obj file for NeRF or SDF.",
+		"MESH_FILE",
+		"Save mesh to *.obj for NeRF or SDF.",
 		{"save_mesh"},
+	};
+
+	ValueFlag<string> save_image_flag{
+		parser,
+		"K,PNG_FILE",
+		"Save image K to *.png for NeRF.",
+		{"save_image"},
 	};
 
 	ValueFlag<string> save_point_flag{
 		parser,
-		"FILE_NAME",
-		"Save point cloud to *.ply file for NeRF.",
+		"S,PC_FILE",
+		"Save point cloud (sample ratio S%) to *.ply for NeRF.",
 		{"save_point"},
-	};
-
-	ValueFlag<string> load_data_flag{
-		parser,
-		"DATASET",
-		"Load training data from dataset (Folder for NeRF, *.obj/*.stl for SDF, *.nvdb for volume, others for image ).",
-		{"load_data"},
 	};
 
 	Flag no_train_flag{
@@ -308,7 +326,6 @@ int main_func(const std::vector<std::string>& arguments) {
 	uint32_t max_time = (max_time_flag)? get(max_time_flag) : atoi(DEF_MAX_TIME);
 	uint32_t max_epoch = (max_epoch_flag)? get(max_epoch_flag) : atoi(DEF_MAX_EPOCH);
 
-	testbed.redraw_gui_next_frame();
 	while (testbed.frame()) {
 		if (testbed.m_training_step % 100 != 0)
 			continue;
@@ -316,7 +333,8 @@ int main_func(const std::vector<std::string>& arguments) {
 		curr_psnr = psnr(testbed.m_loss_scalar.val());
 		tlog::info() << "iteration=" << testbed.m_training_step 
 				<< " loss=" << testbed.m_loss_scalar.val()
-				<< " psnr=" << curr_psnr;
+				<< " psnr=" << curr_psnr
+				<< " memory=" << testbed.gpu_memory_used();
 
 		// Training stop ?
 		if (testbed.m_training_step >= max_epoch || curr_psnr >= max_psnr 
@@ -335,9 +353,37 @@ int main_func(const std::vector<std::string>& arguments) {
 	    save_mesh(testbed, filename);
 	}
 
+	if (save_image_flag) {
+		int image_k = 0;
+		std::string s = get(save_image_flag);
+	    fs::path filename = s;
+
+		size_t pos = s.find_last_of(",");
+		if (pos != std::string::npos) {
+			image_k = atoi(s.substr(0, pos).c_str());
+			filename = s.substr(pos + 1);
+		}
+		std::cout << "Image " << image_k << " to " << filename << std::endl;
+		save_image(testbed, image_k, filename);
+	}
+
 	if (save_point_flag) {
-	    fs::path filename = get(save_point_flag);
-	    save_point(testbed, filename);
+		float ratio = 100.0f;
+		std::string s = get(save_point_flag);
+	    fs::path filename = s;
+
+		size_t pos = s.find_last_of(",");
+		if (pos != std::string::npos) {
+			ratio = atof(s.substr(0, pos).c_str());
+			filename = s.substr(pos + 1);
+		}
+		if (ratio < 0.0001)
+			ratio = 100.0f;
+		if (ratio > 100.0f)
+			ratio = 100.0f;
+
+		std::cout << "Save " << ratio << "% point cloud to " << filename << std::endl;
+	    save_point(testbed, ratio, filename);
 	}
 
 	return 0;

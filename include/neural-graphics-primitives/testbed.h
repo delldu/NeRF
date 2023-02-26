@@ -496,10 +496,16 @@ public:
 
 	float compute_image_mse(bool quantize_to_byte);
 
-	void save_nerf_point_cloud(const char* filename);
+	CudaRenderBufferView render_nerf_image(uint32_t image_k);
+	bool save_nerf_image(uint32_t image_k, const fs::path &filename);
+	void save_nerf_point_cloud(float ratio, const char* filename);
 	tcnn::GPUMemory<NerfCoordinate> get_nerf_rays_from_image(uint32_t image_k);
+	std::vector<NerfPointCloud> get_nerf_points_from_image(uint32_t image_k);
+#if 0	
 	tcnn::GPUMemory<Eigen::Array4f> get_nerf_rgba_from_image(uint32_t image_k, float depth, bool density_as_alpha = false);
-	bool render_nerf_image(uint32_t image_k, const fs::path &filename);
+#endif	
+
+	std::string gpu_memory_used();
 
 	void compute_and_save_marching_cubes_mesh(const char* filename, Eigen::Vector3i res3d = Eigen::Vector3i::Constant(128), BoundingBox aabb = {}, float thresh = 2.5f, bool unwrap_it = false);
 	Eigen::Vector3i compute_and_save_png_slices(const char* filename, int res, BoundingBox aabb = {}, float thresh = 2.5f, float density_range = 4.f, bool flip_y_and_z_axes = false);

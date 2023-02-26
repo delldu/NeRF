@@ -870,27 +870,8 @@ __global__ void composite_kernel_nerf(
 		float weight = alpha * T;
 
 		Array3f rgb = network_to_rgb(local_network_output, rgb_activation);
-
-		if (glow_mode) { // random grid visualizations ftw!
 #if 0
-			if (0) {  // extremely startrek edition
-				float glow_y = (pos.y() - (glow_y_cutoff - 0.5f)) * 2.f;
-				if (glow_y>1.f) glow_y=max(0.f,21.f-glow_y*20.f);
-				if (glow_y>0.f) {
-					float line;
-					line =max(0.f,cosf(pos.y()*2.f*3.141592653589793f * 16.f)-0.95f);
-					line+=max(0.f,cosf(pos.x()*2.f*3.141592653589793f * 16.f)-0.95f);
-					line+=max(0.f,cosf(pos.z()*2.f*3.141592653589793f * 16.f)-0.95f);
-					line+=max(0.f,cosf(pos.y()*4.f*3.141592653589793f * 16.f)-0.975f);
-					line+=max(0.f,cosf(pos.x()*4.f*3.141592653589793f * 16.f)-0.975f);
-					line+=max(0.f,cosf(pos.z()*4.f*3.141592653589793f * 16.f)-0.975f);
-					glow_y=glow_y*glow_y*0.5f + glow_y*line*25.f;
-					rgb.y()+=glow_y;
-					rgb.z()+=glow_y*0.5f;
-					rgb.x()+=glow_y*0.25f;
-				}
-			}
-#endif
+		if (glow_mode) { // random grid visualizations ftw!
 			float glow = 0.f;
 
 			bool green_grid = glow_mode & 1; // glow_mode -- 0
@@ -968,7 +949,7 @@ __global__ void composite_kernel_nerf(
 				}
 			}
 		} // glow
-
+#endif
 		if (render_mode == ERenderMode::Normals) {
 			// Network input contains the gradient of the network output w.r.t. input.
 			// So to compute density gradients, we need to apply the chain rule.
@@ -3701,23 +3682,13 @@ __global__ void get_nerf_rays_kernel(
 	Eigen::Vector2f uv{(float)y/resolution.y(), (float)x/resolution.x()};
 	Ray ray = simple_uv_to_ray(uv, resolution, focal_length, camera_matrix);
 
-	// if (x == 10 && y == 10) {
-	// 	// camera matrix:
-    //     //   [-0.9634,  -0.2611, 0.0508, 0.2047 ],
-    //     //   [ 0.2660,  -0.9462, 0.1840, 0.7417 ],
-    //     //   [ 0.0000,   0.1907, 0.9816, 3.9570 ],
-
-	// 	printf("y * resolution.x() + x = %d\n", y * resolution.x() + x);
-	// 	printf("ray.o: x = %.2f, y = %.2f, z = %.2f\n", ray.o.x(), ray.o.y(), ray.o.z());
-	// 	printf("ray.d: x = %.2f, y = %.2f, z = %.2f\n", ray.d.x(), ray.d.y(), ray.d.z());
-	// }
-
 	rays_out[y * resolution.x() + x].set_with_optional_extra_dims(ray.o, ray.d,
 		MIN_CONE_STEPSIZE() /*dt*/, nullptr /*extra_dims*/, 0 /*stride_in_bytes*/);
 }
 
 GPUMemory<NerfCoordinate> Testbed::get_nerf_rays_from_image(uint32_t image_k) {
-	auto& m = m_nerf.training.dataset.metadata[image_k];
+	auto& ds = m_nerf.training.dataset;
+	auto& m = ds.metadata[image_k];
 	uint32_t n_elements = m.resolution.y() * m.resolution.x();
 	GPUMemory<NerfCoordinate> positions(n_elements);
 
@@ -3735,23 +3706,10 @@ GPUMemory<NerfCoordinate> Testbed::get_nerf_rays_from_image(uint32_t image_k) {
 		positions.data()
 	 );
 
-	uint32_t batch_size = 1024;
-	for (uint32_t offset = 0; offset < n_elements; offset += batch_size) {
-		uint32_t local_batch_size = std::min(n_elements - offset, batch_size);
-
-	// linear_kernel(generate_training_samples_nerf, 0, stream,
-	// 	...);
-	// linear_kernel(rays_march_kernel, 0, m_stream.get(),
-	//     local_batch_size, 
-	// 	   positions + offset,
-	// 	...);
-
-
-	}
-
 	return positions;
 }
 
+#if 0
 GPUMemory<Eigen::Array4f> Testbed::get_nerf_rgba_from_image(uint32_t image_k, float depth, bool density_as_alpha) {
 	auto& m = m_nerf.training.dataset.metadata[image_k];
 	const uint32_t n_elements = m.resolution.y() * m.resolution.x();
@@ -3788,55 +3746,124 @@ GPUMemory<Eigen::Array4f> Testbed::get_nerf_rgba_from_image(uint32_t image_k, fl
 	}
 	return rgba;
 }
+#endif
 
-bool Testbed::render_nerf_image(uint32_t image_k, const fs::path &filename) {
-	if (image_k >= m_nerf.training.dataset.n_images) {
-		tlog::warning() << "Image " << image_k << " >= " << m_nerf.training.dataset.n_images;
-		return false;
-	}	
-	auto& resolution = m_nerf.training.dataset.metadata[image_k].resolution;
+CudaRenderBufferView Testbed::render_nerf_image(uint32_t image_k) {
+	auto& ds = m_nerf.training.dataset;
 
-	// Start
-	CudaRenderBufferView render_buffer;
+	auto& resolution = ds.metadata[image_k].resolution;
+
+	// Init render_buffer_view ...
+	CudaRenderBufferView render_buffer_view;
 	size_t n_pixels = resolution.prod();
 	GPUMemoryArena::Allocation alloc;
 	auto scratch = allocate_workspace_and_distribute<Array4f, float>
 		(m_stream.get(), &alloc, n_pixels, n_pixels);
 
-	render_buffer.frame_buffer = (Array4f *)std::get<0>(scratch);
-	render_buffer.depth_buffer = (float *)std::get<1>(scratch);
-	render_buffer.resolution = resolution;
-	render_buffer.clear(m_stream.get());
+	render_buffer_view.frame_buffer = (Array4f *)std::get<0>(scratch);
+	render_buffer_view.depth_buffer = (float *)std::get<1>(scratch);
+	render_buffer_view.resolution = resolution;
+	render_buffer_view.clear(m_stream.get());
 
+	// Start rendering ...
+	m_render_mode = ERenderMode::Shade;
 	render_nerf(
 		m_stream.get(),
-		render_buffer,
+		render_buffer_view,
 		*m_nerf_network,
 		m_nerf.density_grid_bitfield.data(),
-		m_nerf.training.dataset.metadata[image_k].focal_length,
-		m_nerf.training.dataset.xforms[image_k].start,
-		m_nerf.training.dataset.xforms[image_k].end,
+		ds.metadata[image_k].focal_length,
+		ds.xforms[image_k].start,
+		ds.xforms[image_k].end,
 		{}, // rolling_shutter
 		Vector2f {0.5f, 0.5f},  // screen_center
 		{}, // foveation
 		-1  // visualized_dimension
 	);
+	CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
 
-	tlog::info() << "Image NO: " << image_k;
-	tlog::info() << "Image name: " << m_nerf.training.dataset.paths[image_k];
-	tlog::info() << "Image focal_length: " << m_nerf.training.dataset.metadata[image_k].focal_length;
-	tlog::info() << "Image camera_matrix.start: " << m_nerf.training.dataset.xforms[image_k].start;
-	tlog::info() << "Image camera_matrix.end: " << m_nerf.training.dataset.xforms[image_k].end;
+	return render_buffer_view;
+}
 
+bool Testbed::save_nerf_image(uint32_t image_k, const fs::path &filename) {
+	auto& ds = m_nerf.training.dataset;
+
+	if (image_k >= ds.n_images) {
+		tlog::warning() << "Image " << image_k << " out of range (>= " << ds.n_images << ")";
+		return false;
+	} else {
+		tlog::info() << "Rendering image " << image_k << " from " << ds.paths[image_k];
+	}	
+	auto& resolution = ds.metadata[image_k].resolution;
+
+	CudaRenderBufferView render_buffer_view = render_nerf_image(image_k);
 	save_stbi_gpu(filename, resolution.x(), resolution.y(), 
-		(Array4f *)render_buffer.frame_buffer);
-
-
-	// auto rgba = get_nerf_rgba_from_image(image_k, 0.01 /*depth*/, false);
-	// save_stbi_gpu(filename, res.x(), res.y(), *rgba);
+		(Array4f *)render_buffer_view.frame_buffer);
 
 	return true;
 }
 
+__global__ void get_nerf_points_kernel(
+	const uint32_t image_k,
+	const TrainingImageMetadata* __restrict__ metadata,
+	const TrainingXForm* xform,
+	const Eigen::Array4f *frame_buffer,
+	const float *depth_buffer,
+	NerfPointCloud* __restrict__ points_out)
+{
+	uint32_t x = threadIdx.x + blockIdx.x * blockDim.x;
+	uint32_t y = threadIdx.y + blockIdx.y * blockDim.y;
+	auto& resolution = metadata[image_k].resolution;
+	if (x >= resolution.x() || y >= resolution.y()) {
+		return;
+	}
+	auto& camera_matrix = xform[image_k].start;
+	auto& focal_length = metadata[image_k].focal_length;
+
+	// Eigen::Vector2f uv{(float)y/resolution.y(), (float)x/resolution.x()};
+	Eigen::Vector2f uv{(float)y/resolution.y(), (float)x/resolution.x()};
+	Ray ray = simple_uv_to_ray(uv, resolution, focal_length, camera_matrix);
+
+	uint32_t j = y * resolution.x() + x;
+
+	points_out[j].pos = ray(depth_buffer[j]); //ray.o + depth_buffer[j] * ray.d;
+	points_out[j].rgba = frame_buffer[j];
+}
+
+std::vector<NerfPointCloud> Testbed::get_nerf_points_from_image(uint32_t image_k) {
+	auto& ds = m_nerf.training.dataset;
+	auto& m = ds.metadata[image_k];
+	uint32_t n_elements = m.resolution.y() * m.resolution.x();
+	CudaRenderBufferView render_buffer_view = render_nerf_image(image_k);
+	save_stbi_gpu("/tmp/lego.png", m.resolution.x(), m.resolution.y(), 
+		(Array4f *)render_buffer_view.frame_buffer);
+
+	GPUMemory<NerfPointCloud> gpu_points(n_elements);
+	const dim3 threads = { 16, 8, 1 };
+	const dim3 blocks = { 
+			div_round_up((uint32_t)m.resolution.x(), threads.x),
+			div_round_up((uint32_t)m.resolution.y(), threads.y),
+			div_round_up((uint32_t)1, threads.z) };
+
+	get_nerf_points_kernel<<<blocks, threads, 0, m_stream.get()>>>
+	(
+		image_k,
+		m_nerf.training.dataset.metadata_gpu.data(),
+		m_nerf.training.transforms_gpu.data(),
+		(Array4f *)render_buffer_view.frame_buffer, // (Array4f *)
+		(float *)render_buffer_view.depth_buffer, // (float *)
+		gpu_points.data()
+	 );
+	CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
+
+	std::vector<NerfPointCloud> cpu_points; cpu_points.resize(n_elements);
+	CUDA_CHECK_THROW(cudaMemcpy(cpu_points.data(), gpu_points.data(), 
+		n_elements * sizeof(NerfPointCloud), cudaMemcpyDeviceToHost));
+	CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
+
+	gpu_points.free_memory();
+
+	return cpu_points;
+}
 
 NGP_NAMESPACE_END

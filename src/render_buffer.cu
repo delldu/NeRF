@@ -615,6 +615,7 @@ void CudaRenderBufferView::clear(cudaStream_t stream) const {
 	CUDA_CHECK_THROW(cudaMemsetAsync(depth_buffer, 0, n_pixels * sizeof(float), stream));
 }
 
+
 void CudaRenderBuffer::resize(const Vector2i& res) {
 	m_in_resolution = res;
 	m_frame_buffer.enlarge(res.x() * res.y());
