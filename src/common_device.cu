@@ -80,20 +80,22 @@ GPUMemory<float> load_stbi_gpu(const fs::path& path, int* width, int* height) {
 	return result;
 }
 
-void save_stbi_gpu(const fs::path& filename, int width, int height, const GPUMemory<Array4f>& rgba) {
-	std::vector<Array4f> rgba_cpu;
-	rgba_cpu.resize(rgba.size());
-	rgba.copy_to_host(rgba_cpu);
+void save_stbi_gpu(const fs::path& filename, int width, int height, Array4f *gpu_rgba) {
+	std::vector<Array4f> cpu_rgba;
+	cpu_rgba.resize(width * height);
+
+	CUDA_CHECK_THROW(cudaMemcpy(cpu_rgba.data(), gpu_rgba, width * height * sizeof(Array4f),
+		cudaMemcpyDeviceToHost));
 
 	uint8_t* pngpixels = (uint8_t*)malloc(size_t(width) * size_t(height) * 4);
 	uint8_t* dst = pngpixels;
 	for (int y = 0; y < height; ++y) {
 		for (int x = 0; x < width; ++x) {
 			size_t i = x + y*width;
-			*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].x() * 255.f, 0.f, 255.f);
-			*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].y() * 255.f, 0.f, 255.f);
-			*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].z() * 255.f, 0.f, 255.f);
-			*dst++ = (uint8_t)tcnn::clamp(rgba_cpu[i].w() * 255.f, 0.f, 255.f);
+			*dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].x() * 255.f, 0.f, 255.f);
+			*dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].y() * 255.f, 0.f, 255.f);
+			*dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].z() * 255.f, 0.f, 255.f);
+			*dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].w() * 255.f, 0.f, 255.f);
 		}
 	}
 

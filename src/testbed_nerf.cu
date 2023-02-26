@@ -2324,7 +2324,7 @@ void Testbed::render_nerf(
 	cudaStream_t stream,
 	const CudaRenderBufferView& render_buffer,
 	NerfNetwork<precision_t>& nerf_network,
-	const uint8_t* density_grid_bitfield,
+	const uint8_t* density_grid_bitfield, // m_nerf.density_grid_bitfield
 	const Vector2f& focal_length,
 	const Matrix<float, 3, 4>& camera_matrix0,
 	const Matrix<float, 3, 4>& camera_matrix1,
@@ -3794,10 +3794,46 @@ bool Testbed::render_nerf_image(uint32_t image_k, const fs::path &filename) {
 		tlog::warning() << "Image " << image_k << " >= " << m_nerf.training.dataset.n_images;
 		return false;
 	}	
-	auto& res = m_nerf.training.dataset.metadata[image_k].resolution;
-	auto rgba = get_nerf_rgba_from_image(image_k, 0.01 /*depth*/, false);
+	auto& resolution = m_nerf.training.dataset.metadata[image_k].resolution;
 
-	save_stbi_gpu(filename, res.x(), res.y(), rgba);
+	// Start
+	CudaRenderBufferView render_buffer;
+	size_t n_pixels = resolution.prod();
+	GPUMemoryArena::Allocation alloc;
+	auto scratch = allocate_workspace_and_distribute<Array4f, float>
+		(m_stream.get(), &alloc, n_pixels, n_pixels);
+
+	render_buffer.frame_buffer = (Array4f *)std::get<0>(scratch);
+	render_buffer.depth_buffer = (float *)std::get<1>(scratch);
+	render_buffer.resolution = resolution;
+	render_buffer.clear(m_stream.get());
+
+	render_nerf(
+		m_stream.get(),
+		render_buffer,
+		*m_nerf_network,
+		m_nerf.density_grid_bitfield.data(),
+		m_nerf.training.dataset.metadata[image_k].focal_length,
+		m_nerf.training.dataset.xforms[image_k].start,
+		m_nerf.training.dataset.xforms[image_k].end,
+		{}, // rolling_shutter
+		Vector2f {0.5f, 0.5f},  // screen_center
+		{}, // foveation
+		-1  // visualized_dimension
+	);
+
+	tlog::info() << "Image NO: " << image_k;
+	tlog::info() << "Image name: " << m_nerf.training.dataset.paths[image_k];
+	tlog::info() << "Image focal_length: " << m_nerf.training.dataset.metadata[image_k].focal_length;
+	tlog::info() << "Image camera_matrix.start: " << m_nerf.training.dataset.xforms[image_k].start;
+	tlog::info() << "Image camera_matrix.end: " << m_nerf.training.dataset.xforms[image_k].end;
+
+	save_stbi_gpu(filename, resolution.x(), resolution.y(), 
+		(Array4f *)render_buffer.frame_buffer);
+
+
+	// auto rgba = get_nerf_rgba_from_image(image_k, 0.01 /*depth*/, false);
+	// save_stbi_gpu(filename, res.x(), res.y(), *rgba);
 
 	return true;
 }

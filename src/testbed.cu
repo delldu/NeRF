@@ -4742,7 +4742,8 @@ auto make_copyable_function(F&& f) {
 	};
 }
 
-ScopeGuard Testbed::use_device(cudaStream_t stream, CudaRenderBuffer& render_buffer, Testbed::CudaDevice& device) {
+ScopeGuard Testbed::use_device(cudaStream_t stream, CudaRenderBuffer& render_buffer,
+	Testbed::CudaDevice& device) {
 	device.wait_for(stream);
 
 	if (device.is_primary()) {
@@ -4759,7 +4760,8 @@ ScopeGuard Testbed::use_device(cudaStream_t stream, CudaRenderBuffer& render_buf
 	size_t n_pixels = render_buffer.in_resolution().prod();
 
 	GPUMemoryArena::Allocation alloc;
-	auto scratch = allocate_workspace_and_distribute<Array4f, float>(device.stream(), &alloc, n_pixels, n_pixels);
+	auto scratch = allocate_workspace_and_distribute<Array4f, float>(
+		device.stream(), &alloc, n_pixels, n_pixels);
 
 	device.set_render_buffer_view({
 		std::get<0>(scratch),
