@@ -4815,7 +4815,6 @@ void Testbed::save_nerf_point_cloud(float ratio, const char* filename) {
 	fprintf(f,
 		"ply\n"
 		"format ascii 1.0\n"
-		"comment output from https://github.com/NVlabs/instant-ngp\n"
 		"element vertex %u\n"
 		"property float x\n"
 		"property float y\n"
@@ -4823,30 +4822,35 @@ void Testbed::save_nerf_point_cloud(float ratio, const char* filename) {
 		"property uchar red\n"
 		"property uchar green\n"
 		"property uchar blue\n"
-		"element face 0\n"
-		"property list uchar int vertex_index\n"
 		"end_header\n"
 		, (unsigned int)cpu_points.size()
 	);
 
 	for (size_t i=0; i < cpu_points.size(); ++i) {
 		Vector3f p = cpu_points[i].pos;
-		Vector4f c = cpu_points[i].rgba;
+		Array4f c = cpu_points[i].rgba;
+		uint8_t c8[3] = { (uint8_t)c.x(), (uint8_t)c.y(), (uint8_t)c.z()};
+			// (unsigned char)tcnn::clamp(c.x()*255.f, 0.f, 255.f),
+			// (unsigned char)tcnn::clamp(c.y()*255.f, 0.f, 255.f),
+			// (unsigned char)tcnn::clamp(c.z()*255.f, 0.f, 255.f)};
 
-		unsigned char c8[3] = {(unsigned char)tcnn::clamp(c.x()*255.f,0.f,255.f),
-			(unsigned char)tcnn::clamp(c.y()*255.f,0.f,255.f),
-			(unsigned char)tcnn::clamp(c.z()*255.f,0.f,255.f)};
+			// (unsigned char)tcnn::clamp(c.x(), 0.f, 255.f),
+			// (unsigned char)tcnn::clamp(c.y(), 0.f, 255.f),
+			// (unsigned char)tcnn::clamp(c.z(), 0.f, 255.f)};
 
-		if (i % 100 == 0) {
-			std::cout << "pos: " << p << std::endl;
-			std::cout << "rgba:" << c << std::endl;
-		}
+		// if (i % 100 == 0) {
+		// 	std::cout << "pos: " << p.x() << "," << p.y() << "," << p.z() << std::endl;
+		// 	std::cout << "rgba:" << c.x() << "," << c.y() << "," << c.z() << "," << c.w() << std::endl;
+		// }
 
-		fprintf(f, "%0.5f %0.5f %0.5f %d %d %d\n", p.x(), p.y(), p.z(), c8[0], c8[1], c8[2]);
+		fprintf(f, "%0.3f %0.3f %0.3f %d %d %d\n",
+			p.x(), p.y(), p.z(), 
+			c8[0], c8[1], c8[2]);
 	}
 
 	fclose(f);
 
+	tlog::info() << "Total points: " << cpu_points.size();
 	tlog::info() << "Save point cloud to " << filename << " ...";
 }
 

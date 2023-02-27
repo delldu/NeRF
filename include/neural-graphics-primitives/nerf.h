@@ -111,7 +111,7 @@ struct NerfCoordinate {
 
 struct NerfPointCloud {
 	Eigen::Vector3f pos;
-	Eigen::Vector4f rgba;
+	Eigen::Array4f rgba;
 };
 
 NGP_NAMESPACE_END

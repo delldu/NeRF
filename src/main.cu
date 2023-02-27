@@ -282,7 +282,8 @@ int main_func(const std::vector<std::string>& arguments) {
 
 	// Start ...
 	Testbed testbed;
-
+	testbed.set_all_devices_dirty();
+	
 	for (auto file : get(files)) {
 		testbed.load_file(file);
 	}
@@ -326,6 +327,7 @@ int main_func(const std::vector<std::string>& arguments) {
 	uint32_t max_time = (max_time_flag)? get(max_time_flag) : atoi(DEF_MAX_TIME);
 	uint32_t max_epoch = (max_epoch_flag)? get(max_epoch_flag) : atoi(DEF_MAX_EPOCH);
 
+	testbed.m_training_step = 0;
 	while (testbed.frame()) {
 		if (testbed.m_training_step % 100 != 0)
 			continue;

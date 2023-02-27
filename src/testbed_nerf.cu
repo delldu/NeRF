@@ -870,7 +870,7 @@ __global__ void composite_kernel_nerf(
 		float weight = alpha * T;
 
 		Array3f rgb = network_to_rgb(local_network_output, rgb_activation);
-#if 0
+#if 1 // xxxx8888
 		if (glow_mode) { // random grid visualizations ftw!
 			float glow = 0.f;
 
@@ -2027,6 +2027,8 @@ void Testbed::NerfTracer::init_rays_from_camera(
 ) {
 	// Make sure we have enough memory reserved to render at the requested resolution
 	size_t n_pixels = (size_t)resolution.x() * resolution.y();
+	m_n_rays_initialized = resolution.x() * resolution.y(); // xxxx8888
+
 	// n_pixels -- 10260, ..., 1048320
 	enlarge(n_pixels, padded_output_width, n_extra_dims, stream);
 
@@ -2110,13 +2112,15 @@ uint32_t Testbed::NerfTracer::trace(
 	cudaStream_t stream
 ) {
 	// m_n_rays_initialized = 10260, ..., 2073600
+#if 1 // xxxx8888	
 	if (m_n_rays_initialized == 0) {
 		return 0;
 	}
-
+#endif
 	CUDA_CHECK_THROW(cudaMemsetAsync(m_hit_counter, 0, sizeof(uint32_t), stream));
 
 	uint32_t n_alive = m_n_rays_initialized;
+	tlog::info() << "n_alive -- " << n_alive;
 
 	uint32_t i = 1;
 
@@ -2141,6 +2145,9 @@ uint32_t Testbed::NerfTracer::trace(
 		}
 		// n_alive -- 235996, ..., 0
 		if (n_alive == 0) {
+			if (double_buffer_index < 2) // xxxx8888 try more times
+				continue;
+
 			break;
 		}
 
@@ -2212,7 +2219,6 @@ uint32_t Testbed::NerfTracer::trace(
 		// ====>
 		// rgba[i] = local_rgba;
 		// depth[i] = local_depth;
-
 		i += n_steps_between_compaction; // n_steps_between_compaction -- 8
 	}
 
@@ -2302,9 +2308,9 @@ const float* Testbed::get_inference_extra_dims(cudaStream_t stream) const {
 
 // Start ...
 void Testbed::render_nerf(
-	cudaStream_t stream,
-	const CudaRenderBufferView& render_buffer,
-	NerfNetwork<precision_t>& nerf_network,
+	cudaStream_t stream, // m_stream.get()
+	const CudaRenderBufferView& render_buffer, 
+	NerfNetwork<precision_t>& nerf_network, // *m_nerf_network
 	const uint8_t* density_grid_bitfield, // m_nerf.density_grid_bitfield
 	const Vector2f& focal_length,
 	const Matrix<float, 3, 4>& camera_matrix0,
@@ -2429,6 +2435,8 @@ void Testbed::render_nerf(
 	}
 
 	// n_hit -- 1151, ..., 2848
+	tlog::info() << "------- n_hit -- " << n_hit;
+
 	linear_kernel(shade_kernel_nerf, 0, stream,
 		n_hit,
 		rays_hit.rgba,
@@ -3667,7 +3675,7 @@ __global__ void get_nerf_rays_kernel(
 	const uint32_t image_k,
 	const TrainingImageMetadata* __restrict__ metadata,
 	const TrainingXForm* xform,
-	NerfCoordinate* __restrict__ rays_out)
+	Ray* __restrict__ rays_out)
 {
 	uint32_t x = threadIdx.x + blockIdx.x * blockDim.x;
 	uint32_t y = threadIdx.y + blockIdx.y * blockDim.y;
@@ -3682,15 +3690,17 @@ __global__ void get_nerf_rays_kernel(
 	Eigen::Vector2f uv{(float)y/resolution.y(), (float)x/resolution.x()};
 	Ray ray = simple_uv_to_ray(uv, resolution, focal_length, camera_matrix);
 
-	rays_out[y * resolution.x() + x].set_with_optional_extra_dims(ray.o, ray.d,
-		MIN_CONE_STEPSIZE() /*dt*/, nullptr /*extra_dims*/, 0 /*stride_in_bytes*/);
+	// rays_out[y * resolution.x() + x].set_with_optional_extra_dims(ray.o, ray.d,
+	// 	MIN_CONE_STEPSIZE() /*dt*/, nullptr /*extra_dims*/, 0 /*stride_in_bytes*/);
+
+	rays_out[y * resolution.x() + x] = ray;
 }
 
-GPUMemory<NerfCoordinate> Testbed::get_nerf_rays_from_image(uint32_t image_k) {
+GPUMemory<Ray> Testbed::get_nerf_rays_from_image(uint32_t image_k) {
 	auto& ds = m_nerf.training.dataset;
 	auto& m = ds.metadata[image_k];
 	uint32_t n_elements = m.resolution.y() * m.resolution.x();
-	GPUMemory<NerfCoordinate> positions(n_elements);
+	GPUMemory<Ray> rays(n_elements);
 
 	const dim3 threads = { 16, 8, 1 };
 	const dim3 blocks = { 
@@ -3703,10 +3713,10 @@ GPUMemory<NerfCoordinate> Testbed::get_nerf_rays_from_image(uint32_t image_k) {
 		image_k,
 		m_nerf.training.dataset.metadata_gpu.data(),
 		m_nerf.training.transforms_gpu.data(),
-		positions.data()
+		rays.data()
 	 );
 
-	return positions;
+	return rays;
 }
 
 #if 0
@@ -3763,8 +3773,14 @@ CudaRenderBufferView Testbed::render_nerf_image(uint32_t image_k) {
 	render_buffer_view.frame_buffer = (Array4f *)std::get<0>(scratch);
 	render_buffer_view.depth_buffer = (float *)std::get<1>(scratch);
 	render_buffer_view.resolution = resolution;
+	render_buffer_view.spp = 0;
+	render_buffer_view.hidden_area_mask = nullptr;
 	render_buffer_view.clear(m_stream.get());
 
+	// m_nerf.density_grid_bitfield.memset(0xff); // xxxx8888 Suppose all rays is valid !!!
+	// if (m_training_step < 512) { // xxxx8888
+	// 	train(4096); // need more trainning ...
+	// }
 	// Start rendering ...
 	m_render_mode = ERenderMode::Shade;
 	render_nerf(
@@ -3803,65 +3819,47 @@ bool Testbed::save_nerf_image(uint32_t image_k, const fs::path &filename) {
 	return true;
 }
 
-__global__ void get_nerf_points_kernel(
-	const uint32_t image_k,
-	const TrainingImageMetadata* __restrict__ metadata,
-	const TrainingXForm* xform,
-	const Eigen::Array4f *frame_buffer,
-	const float *depth_buffer,
-	NerfPointCloud* __restrict__ points_out)
-{
-	uint32_t x = threadIdx.x + blockIdx.x * blockDim.x;
-	uint32_t y = threadIdx.y + blockIdx.y * blockDim.y;
-	auto& resolution = metadata[image_k].resolution;
-	if (x >= resolution.x() || y >= resolution.y()) {
-		return;
-	}
-	auto& camera_matrix = xform[image_k].start;
-	auto& focal_length = metadata[image_k].focal_length;
-
-	// Eigen::Vector2f uv{(float)y/resolution.y(), (float)x/resolution.x()};
-	Eigen::Vector2f uv{(float)y/resolution.y(), (float)x/resolution.x()};
-	Ray ray = simple_uv_to_ray(uv, resolution, focal_length, camera_matrix);
-
-	uint32_t j = y * resolution.x() + x;
-
-	points_out[j].pos = ray(depth_buffer[j]); //ray.o + depth_buffer[j] * ray.d;
-	points_out[j].rgba = frame_buffer[j];
-}
-
 std::vector<NerfPointCloud> Testbed::get_nerf_points_from_image(uint32_t image_k) {
 	auto& ds = m_nerf.training.dataset;
 	auto& m = ds.metadata[image_k];
 	uint32_t n_elements = m.resolution.y() * m.resolution.x();
 	CudaRenderBufferView render_buffer_view = render_nerf_image(image_k);
-	save_stbi_gpu("/tmp/lego.png", m.resolution.x(), m.resolution.y(), 
-		(Array4f *)render_buffer_view.frame_buffer);
+	// save_stbi_gpu("/tmp/lego.png", m.resolution.x(), m.resolution.y(), 
+	// 	(Array4f *)render_buffer_view.frame_buffer);
 
-	GPUMemory<NerfPointCloud> gpu_points(n_elements);
-	const dim3 threads = { 16, 8, 1 };
-	const dim3 blocks = { 
-			div_round_up((uint32_t)m.resolution.x(), threads.x),
-			div_round_up((uint32_t)m.resolution.y(), threads.y),
-			div_round_up((uint32_t)1, threads.z) };
+	std::vector<Array4f> cpu_rgba; cpu_rgba.resize(n_elements);
+	CUDA_CHECK_THROW(cudaMemcpy(cpu_rgba.data(), render_buffer_view.frame_buffer, n_elements * sizeof(Array4f),
+		cudaMemcpyDeviceToHost));
 
-	get_nerf_points_kernel<<<blocks, threads, 0, m_stream.get()>>>
-	(
-		image_k,
-		m_nerf.training.dataset.metadata_gpu.data(),
-		m_nerf.training.transforms_gpu.data(),
-		(Array4f *)render_buffer_view.frame_buffer, // (Array4f *)
-		(float *)render_buffer_view.depth_buffer, // (float *)
-		gpu_points.data()
-	 );
-	CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
+	std::vector<float> cpu_depth; cpu_depth.resize(n_elements);
+	CUDA_CHECK_THROW(cudaMemcpy(cpu_depth.data(), render_buffer_view.depth_buffer, n_elements * sizeof(float),
+		cudaMemcpyDeviceToHost));
 
-	std::vector<NerfPointCloud> cpu_points; cpu_points.resize(n_elements);
-	CUDA_CHECK_THROW(cudaMemcpy(cpu_points.data(), gpu_points.data(), 
-		n_elements * sizeof(NerfPointCloud), cudaMemcpyDeviceToHost));
-	CUDA_CHECK_THROW(cudaStreamSynchronize(m_stream.get()));
+	GPUMemory<Ray> rays = get_nerf_rays_from_image(image_k);
+	std::vector<Ray> cpu_rays; cpu_rays.resize(n_elements);
+	CUDA_CHECK_THROW(cudaMemcpy(cpu_rays.data(), rays.data(), n_elements * sizeof(Ray),
+		cudaMemcpyDeviceToHost));
 
-	gpu_points.free_memory();
+	std::vector<NerfPointCloud> cpu_points;
+	for (int j = 0; j < n_elements; j++) {
+		if (cpu_depth[j] < MAX_DEPTH() && (cpu_rgba[j].x() > 0.1f || cpu_rgba[j].y() > 0.1f || cpu_rgba[j].z() > 0.1f)) {
+			NerfPointCloud pc;
+			pc.pos = cpu_rays[j](cpu_depth[j]); // cpu_rays[j].o + cpu_depth[j] * cpu_rays[j].d;
+			pc.rgba = cpu_rgba[j] * 255.0f;
+			// pc.depth = cpu_depth[j];
+			cpu_points.push_back(pc);
+			tlog::info() << "------- j1 --------" << j;
+			// tlog::info() << "rays.o: " << cpu_rays[j].o;
+			// tlog::info() << "rays.d: " << cpu_rays[j].d;
+			tlog::info() << "depth: " << pc.pos;
+			tlog::info() << "------- j2 --------" << j;
+			tlog::info() << "color: " << pc.rgba;
+			tlog::info() << "------- j3 --------" << j;
+		}
+	}
+	tlog::info() << "Total points ---> " << cpu_points.size();
+
+	// rays.free_memory();
 
 	return cpu_points;
 }
