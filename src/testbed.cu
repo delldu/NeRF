@@ -4805,7 +4805,9 @@ void Testbed::save_nerf_point_cloud(float ratio, const char* filename) {
 		return;
 	}
 
-	std::vector<NerfPointCloud> cpu_points = get_nerf_points_from_image(100);
+	std::vector<NerfPointCloud> cpu_points = get_nerf_point_cloud();
+	std::random_shuffle(cpu_points.begin(), cpu_points.end());
+	uint32_t n_elements = (int)(ratio * cpu_points.size()/100.0f);
 
 	FILE* f = native_fopen(filename, "wb");
 	if (!f) {
@@ -4823,10 +4825,10 @@ void Testbed::save_nerf_point_cloud(float ratio, const char* filename) {
 		"property uchar green\n"
 		"property uchar blue\n"
 		"end_header\n"
-		, (unsigned int)cpu_points.size()
+		, n_elements
 	);
 
-	for (size_t i=0; i < cpu_points.size(); ++i) {
+	for (size_t i=0; i < n_elements; ++i) {
 		Vector3f p = cpu_points[i].pos;
 		Array4f c = cpu_points[i].rgba;
 		uint8_t c8[3] = { (uint8_t)c.x(), (uint8_t)c.y(), (uint8_t)c.z()};
@@ -4837,8 +4839,7 @@ void Testbed::save_nerf_point_cloud(float ratio, const char* filename) {
 
 	fclose(f);
 
-	tlog::info() << "Total points: " << cpu_points.size();
-	tlog::info() << "Save point cloud to " << filename << " ...";
+	tlog::success() << n_elements << " points saved to " << filename << " ...";
 }
 
 std::string Testbed::gpu_memory_used() {

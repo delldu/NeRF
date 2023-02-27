@@ -497,13 +497,10 @@ public:
 	float compute_image_mse(bool quantize_to_byte);
 
 	CudaRenderBufferView render_nerf_image(uint32_t image_k);
-	bool save_nerf_image(uint32_t image_k, const fs::path &filename);
-	void save_nerf_point_cloud(float ratio, const char* filename);
 	tcnn::GPUMemory<Ray> get_nerf_rays_from_image(uint32_t image_k);
-	std::vector<NerfPointCloud> get_nerf_points_from_image(uint32_t image_k);
-#if 0	
-	tcnn::GPUMemory<Eigen::Array4f> get_nerf_rgba_from_image(uint32_t image_k, float depth, bool density_as_alpha = false);
-#endif	
+	bool save_nerf_image(uint32_t image_k, const fs::path &filename);
+	std::vector<NerfPointCloud> get_nerf_point_cloud();
+	void save_nerf_point_cloud(float ratio, const char* filename);
 
 	std::string gpu_memory_used();
 

@@ -385,7 +385,7 @@ int main_func(const std::vector<std::string>& arguments) {
 		if (ratio > 100.0f)
 			ratio = 100.0f;
 
-		std::cout << "Save " << ratio << "% point cloud to " << filename << std::endl;
+		std::cout << "Saving " << ratio << "% point cloud to " << filename << std::endl;
 	    save_point(testbed, ratio, filename);
 	}
 

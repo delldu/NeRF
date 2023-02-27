@@ -6,11 +6,12 @@
 # ./instant-ngp data/nerf/lego --load_model=/tmp/lego.msgpack \
 #     --save_model=/tmp/lego.msgpack --save_mesh "build/lego.obj"
 
-./instant-ngp data/nerf/lego --load_model=/tmp/lego.msgpack \
-    --save_point build/lego.ply
 
 # ./instant-ngp data/nerf/lego --load_model=/tmp/lego.msgpack \
 #     --save_image 10,build/lego.png
 
 # ./instant-ngp data/nerf/lego --load_model=/tmp/lego.msgpack --no-train \
 #     --save_image 0,build/lego.png
+
+./instant-ngp data/nerf/lego --load_model=/tmp/lego.msgpack \
+    --save_point 100.0,build/lego.ply
