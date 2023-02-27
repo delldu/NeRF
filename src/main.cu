@@ -143,7 +143,7 @@ int main_func(const std::vector<std::string>& arguments) {
 		parser,
 		"NO_GUI",
 		"Disable GUI.",
-		{"no-gui"},
+		{"no_gui"},
 	};
 
 	ValueFlag<uint32_t> width_flag{
@@ -160,14 +160,14 @@ int main_func(const std::vector<std::string>& arguments) {
 		{"height"},
 	};
 
-// #ifdef NGP_GUI
-// 	Flag vr_flag{
-// 		parser,
-// 		"VR",
-// 		"Enable VR",
-// 		{"vr"}
-// 	};
-// #endif
+#ifdef NGP_GUI
+	Flag vr_flag{
+		parser,
+		"VR",
+		"Enable VR",
+		{"vr"}
+	};
+#endif
 
 	ValueFlag<string> load_config_flag{
 		parser,
@@ -222,7 +222,7 @@ int main_func(const std::vector<std::string>& arguments) {
 		parser,
 		"NO_TRAIN",
 		"Disable training.",
-		{"no-train"},
+		{"no_train"},
 	};
 
 	ValueFlag<int32_t> max_epoch_flag{
@@ -282,7 +282,6 @@ int main_func(const std::vector<std::string>& arguments) {
 
 	// Start ...
 	Testbed testbed;
-	testbed.set_all_devices_dirty();
 	
 	for (auto file : get(files)) {
 		testbed.load_file(file);
@@ -292,33 +291,35 @@ int main_func(const std::vector<std::string>& arguments) {
 		testbed.load_training_data(get(load_data_flag));
 	}
 
-	testbed.m_train = !no_train_flag;
+	if (load_config_flag) {
+		testbed.reload_network_from_file(get(load_config_flag));
+	}
 
 	if (load_model_flag) {
 	    fs::path filename = get(load_model_flag);
 	    load_model(testbed, filename);
 	}
-	if (load_config_flag) {
-		testbed.reload_network_from_file(get(load_config_flag));
-	}
 
+	testbed.m_train = !no_train_flag;
 
 #ifdef NGP_GUI
 	bool gui = !no_gui_flag;
 #else
 	bool gui = false;
 #endif
+	if (! testbed.m_train) // set no-gui without training
+		gui = false;
 
 	if (gui) {
 		testbed.init_window(width_flag ? get(width_flag) : atoi(DEF_GUI_WIDTH),
 			height_flag ? get(height_flag) : atoi(DEF_GUI_HEIGHT));
 	}
 
-// #ifdef NGP_GUI
-// 	if (vr_flag) {
-// 		testbed.init_vr();
-// 	}
-// #endif
+#ifdef NGP_GUI
+	if (vr_flag) {
+		testbed.init_vr();
+	}
+#endif
 
 	// Render/training loop
 	float curr_psnr = 0.0f;
@@ -328,7 +329,7 @@ int main_func(const std::vector<std::string>& arguments) {
 	uint32_t max_epoch = (max_epoch_flag)? get(max_epoch_flag) : atoi(DEF_MAX_EPOCH);
 
 	testbed.m_training_step = 0;
-	while (testbed.frame()) {
+	while (testbed.m_train && testbed.frame()) {
 		if (testbed.m_training_step % 100 != 0)
 			continue;
 
