@@ -102,6 +102,20 @@ void save_image(Testbed &testbed, int k, fs::path &filename)
 	testbed.save_nerf_image(k, filename);
 }
 
+void save_depth(Testbed &testbed, int k, fs::path &filename)
+{
+    if (! file_like(filename, "png")) {
+		tlog::warning() << "Output image should be *.png file.";
+		return;
+    }
+
+	if (testbed.m_testbed_mode != ETestbedMode::Nerf) {
+		tlog::warning() << "Save depth only for NeRF.";
+		return;
+	}
+
+	testbed.save_nerf_depth(k, filename);
+}
 
 void save_point(Testbed &testbed, float ratio, fs::path &filename)
 {
@@ -210,6 +224,14 @@ int main_func(const std::vector<std::string>& arguments) {
 		"Save image K to *.png for NeRF.",
 		{"save_image"},
 	};
+
+	ValueFlag<string> save_depth_flag{
+		parser,
+		"K,PNG_FILE",
+		"Save depth K to *.png for NeRF.",
+		{"save_depth"},
+	};
+
 
 	ValueFlag<string> save_point_flag{
 		parser,
@@ -366,9 +388,24 @@ int main_func(const std::vector<std::string>& arguments) {
 			image_k = atoi(s.substr(0, pos).c_str());
 			filename = s.substr(pos + 1);
 		}
-		std::cout << "Image " << image_k << " to " << filename << std::endl;
+		std::cout << "Save image " << image_k << " to " << filename << std::endl;
 		save_image(testbed, image_k, filename);
 	}
+
+	if (save_depth_flag) {
+		int image_k = 0;
+		std::string s = get(save_depth_flag);
+	    fs::path filename = s;
+
+		size_t pos = s.find_last_of(",");
+		if (pos != std::string::npos) {
+			image_k = atoi(s.substr(0, pos).c_str());
+			filename = s.substr(pos + 1);
+		}
+		std::cout << "Save depth " << image_k << " to " << filename << std::endl;
+		save_depth(testbed, image_k, filename);
+	}
+
 
 	if (save_point_flag) {
 		float ratio = 100.0f;

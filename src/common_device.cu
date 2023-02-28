@@ -105,5 +105,29 @@ void save_stbi_gpu(const fs::path& filename, int width, int height, Array4f *gpu
 	tlog::success() << "Save RGBA to " << filename;
 }
 
+void save_depth_gpu(const fs::path& filename, int width, int height, float *gpu_depth) {
+	uint8_t R, G, B;
+
+	std::vector<float> cpu_depth;
+	cpu_depth.resize(width * height);
+
+	CUDA_CHECK_THROW(cudaMemcpy(cpu_depth.data(), gpu_depth, width * height * sizeof(float),
+		cudaMemcpyDeviceToHost));
+
+	uint8_t* pngpixels = (uint8_t*)malloc(size_t(width) * size_t(height) * 4);
+	uint8_t* dst = pngpixels;
+	for (int y = 0; y < height; ++y) {
+		for (int x = 0; x < width; ++x) {
+			size_t i = x + y*width;
+			depth_rgb(cpu_depth[i], &R, &G, &B);
+			*dst++ = R;	*dst++ = G; *dst++ = B; *dst++ = 255;
+		}
+	}
+
+	write_stbi(filename, width, height, 4, pngpixels);
+	free(pngpixels);
+
+	tlog::success() << "Save depth to " << filename;
+}
 
 NGP_NAMESPACE_END

@@ -3674,7 +3674,6 @@ inline NGP_HOST_DEVICE Ray simple_uv_to_ray(
 	dir = camera_matrix.block<3, 3>(0, 0) * dir;
 	Eigen::Vector3f origin = camera_matrix.col(3);
 
-	// return {origin, dir};
 	return {origin, dir.normalized()};
 }
 
@@ -3778,6 +3777,24 @@ bool Testbed::save_nerf_image(uint32_t image_k, const fs::path &filename) {
 	return true;
 }
 
+bool Testbed::save_nerf_depth(uint32_t image_k, const fs::path &filename) {
+	auto& ds = m_nerf.training.dataset;
+
+	if (image_k >= ds.n_images) {
+		tlog::warning() << "Image " << image_k << " out of range (>= " << ds.n_images << ")";
+		return false;
+	} else {
+		tlog::info() << "Rendering image " << image_k << " from " << ds.paths[image_k];
+	}	
+	auto& resolution = ds.metadata[image_k].resolution;
+
+	CudaRenderBufferView render_buffer_view = render_nerf_image(image_k);
+	save_depth_gpu(filename, resolution.x(), resolution.y(), 
+		(float *)render_buffer_view.depth_buffer);
+
+	return true;
+}
+
 std::vector<NerfPointCloud> Testbed::get_nerf_point_cloud() {
 	std::vector<NerfPointCloud> cpu_points;
 
@@ -3786,7 +3803,7 @@ std::vector<NerfPointCloud> Testbed::get_nerf_point_cloud() {
     auto pc_logger = tlog::Logger("Create point cloud ...");
     auto progress = pc_logger.progress(ds.n_images);
 
-	for (int image_k = 0; image_k < 5 /*ds.n_images */; image_k++) {
+	for (int image_k = 0; image_k < 1 /*ds.n_images */; image_k++) {
 		auto& m = ds.metadata[image_k];
 		uint32_t n_elements = m.resolution.y() * m.resolution.x();
 
