@@ -3803,7 +3803,7 @@ std::vector<NerfPointCloud> Testbed::get_nerf_point_cloud() {
     auto pc_logger = tlog::Logger("Create point cloud ...");
     auto progress = pc_logger.progress(ds.n_images);
 
-	for (int image_k = 0; image_k < 1 /*ds.n_images */; image_k++) {
+	for (int image_k = 0; image_k < 10 /*ds.n_images */; image_k++) {
 		auto& m = ds.metadata[image_k];
 		uint32_t n_elements = m.resolution.y() * m.resolution.x();
 
@@ -3817,10 +3817,20 @@ std::vector<NerfPointCloud> Testbed::get_nerf_point_cloud() {
 		CUDA_CHECK_THROW(cudaMemcpy(cpu_depth.data(), render_buffer_view.depth_buffer,
 			n_elements * sizeof(float), cudaMemcpyDeviceToHost));
 
-		GPUMemory<Ray> rays = get_nerf_rays_from_image(image_k);
-		std::vector<Ray> cpu_rays; cpu_rays.resize(n_elements);
-		CUDA_CHECK_THROW(cudaMemcpy(cpu_rays.data(), rays.data(), n_elements * sizeof(Ray),
-			cudaMemcpyDeviceToHost));
+		// GPUMemory<Ray> rays = get_nerf_rays_from_image(image_k);
+		// std::vector<Ray> cpu_rays; cpu_rays.resize(n_elements);
+		// CUDA_CHECK_THROW(cudaMemcpy(cpu_rays.data(), rays.data(), n_elements * sizeof(Ray),
+		// 	cudaMemcpyDeviceToHost));
+		Eigen::Matrix3f K = Eigen::Matrix3f::Identity();
+		K(0, 0) = m.focal_length.x();
+		K(0, 2) = m.resolution.x()/2.0;
+		K(1, 1) = m.focal_length.y();
+		K(1, 2) = m.resolution.y()/2.0;
+
+		Eigen::Matrix3f K_inverse = K.inverse();
+		Eigen::Matrix3f R = ds.xforms[image_k].start.block<3,3>(0,0);
+		Eigen::Matrix3f R_inverse = R.inverse();
+		Eigen::Vector3f T = R * ds.xforms[image_k].start.col(3);
 
 		for (int j = 0; j < n_elements; j++) {
 			// if (cpu_depth[j] < 0.0f || cpu_depth[j] >= MAX_DEPTH())
@@ -3833,9 +3843,14 @@ std::vector<NerfPointCloud> Testbed::get_nerf_point_cloud() {
 			// 	continue;
 
 			NerfPointCloud pc;
-			Vector3f idir = cpu_rays[j].d.cwiseInverse();
-			pc.pos = cpu_rays[j](cpu_depth[j]); // cpu_rays[j].o + cpu_depth[j] * cpu_rays[j].d;
-			// pc.pos = Eigen::Vector3f{pc.pos.x()*idir.x(), pc.pos.y() * idir.y(), pc.pos.z() * idir.z()};
+			float u = (float)(j/m.resolution.x());
+			float v = (float)(j % m.resolution.x());
+			Eigen::Vector3f uv_point = { cpu_depth[j] * u, cpu_depth[j] * v, cpu_depth[j]};
+
+			// pc.pos = cpu_rays[j](cpu_depth[j]); // cpu_rays[j].o + cpu_depth[j] * cpu_rays[j].d;
+			// Eigen::Vector3f pos = R_inverse * K_inverse * uv_point;
+			pc.pos = R_inverse * (K_inverse * uv_point - T);
+
 			pc.rgba = cpu_rgba[j] * 255.0f;
 			cpu_points.push_back(pc);
 		}
