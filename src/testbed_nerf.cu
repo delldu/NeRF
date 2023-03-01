@@ -3803,7 +3803,8 @@ std::vector<NerfPointCloud> Testbed::get_nerf_point_cloud() {
     auto pc_logger = tlog::Logger("Create point cloud ...");
     auto progress = pc_logger.progress(ds.n_images);
 
-	for (int image_k = 0; image_k < 10 /*ds.n_images */; image_k++) {
+
+	for (int image_k = 0; image_k < 5 /*ds.n_images*/; image_k++) {
 		auto& m = ds.metadata[image_k];
 		uint32_t n_elements = m.resolution.y() * m.resolution.x();
 
@@ -3821,22 +3822,28 @@ std::vector<NerfPointCloud> Testbed::get_nerf_point_cloud() {
 		// std::vector<Ray> cpu_rays; cpu_rays.resize(n_elements);
 		// CUDA_CHECK_THROW(cudaMemcpy(cpu_rays.data(), rays.data(), n_elements * sizeof(Ray),
 		// 	cudaMemcpyDeviceToHost));
+
 		Eigen::Matrix3f K = Eigen::Matrix3f::Identity();
 		K(0, 0) = m.focal_length.x();
 		K(0, 2) = m.resolution.x()/2.0;
 		K(1, 1) = m.focal_length.y();
 		K(1, 2) = m.resolution.y()/2.0;
+		Matrix3f K_inverse = K.inverse();
 
-		Eigen::Matrix3f K_inverse = K.inverse();
-		Eigen::Matrix3f R = ds.xforms[image_k].start.block<3,3>(0,0);
-		Eigen::Matrix3f R_inverse = R.inverse();
-		Eigen::Vector3f T = R * ds.xforms[image_k].start.col(3);
+		Eigen::Matrix<float, 3, 4> camera_matrix = 
+			ds.ngp_matrix_to_nerf(ds.xforms[image_k].start);
+		// Eigen::Matrix<float, 3, 4> camera_matrix = ds.xforms[image_k].start;
+		Matrix3f R = camera_matrix.block<3,3>(0,0);
+		Vector3f T = camera_matrix.col(3);		
+		Matrix3f R_inverse = R.inverse();
+
+		// std::cout << "image name:" << ds.paths[image_k] << std::endl;
+		// std::cout << "K: " << K << std::endl;
+		// std::cout << "R: " << R << std::endl;
+		// std::cout << "T: " << T << std::endl;
 
 		for (int j = 0; j < n_elements; j++) {
-			// if (cpu_depth[j] < 0.0f || cpu_depth[j] >= MAX_DEPTH())
-			// 	continue;
-
-			if (cpu_depth[j] >= MAX_DEPTH())
+			if (cpu_depth[j] < 0.0f || cpu_depth[j] >= MAX_DEPTH())
 				continue;
 
 			// if (cpu_rgba[j].x() < 0.1f && cpu_rgba[j].y() < 0.1f && cpu_rgba[j].z() < 0.1f)
@@ -3845,12 +3852,10 @@ std::vector<NerfPointCloud> Testbed::get_nerf_point_cloud() {
 			NerfPointCloud pc;
 			float u = (float)(j/m.resolution.x());
 			float v = (float)(j % m.resolution.x());
-			Eigen::Vector3f uv_point = { cpu_depth[j] * u, cpu_depth[j] * v, cpu_depth[j]};
+			float depth = cpu_depth[j];
+			Vector3f uv_point = { depth * u, depth * v, depth };
 
-			// pc.pos = cpu_rays[j](cpu_depth[j]); // cpu_rays[j].o + cpu_depth[j] * cpu_rays[j].d;
-			// Eigen::Vector3f pos = R_inverse * K_inverse * uv_point;
-			pc.pos = R_inverse * (K_inverse * uv_point - T);
-
+			pc.pos = R_inverse * K_inverse * uv_point - T;
 			pc.rgba = cpu_rgba[j] * 255.0f;
 			cpu_points.push_back(pc);
 		}
