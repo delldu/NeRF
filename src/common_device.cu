@@ -101,8 +101,6 @@ void save_stbi_gpu(const fs::path& filename, int width, int height, Array4f *gpu
 
 	write_stbi(filename, width, height, 4, pngpixels);
 	free(pngpixels);
-
-	tlog::success() << "Save RGBA to " << filename;
 }
 
 void save_depth_gpu(const fs::path& filename, int width, int height, float *gpu_depth) {
@@ -126,8 +124,6 @@ void save_depth_gpu(const fs::path& filename, int width, int height, float *gpu_
 
 	write_stbi(filename, width, height, 4, pngpixels);
 	free(pngpixels);
-
-	tlog::success() << "Save depth to " << filename;
 }
 
 NGP_NAMESPACE_END

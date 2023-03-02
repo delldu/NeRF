@@ -4799,49 +4799,6 @@ void Testbed::set_loop_animation(bool value) {
 	m_camera_path.loop = value;
 }
 
-void Testbed::save_nerf_point_cloud(float ratio, const char* filename) {
-	if (m_testbed_mode != ETestbedMode::Nerf) {
-		tlog::warning() << "Save point cloud only for NeRF.";
-		return;
-	}
-
-	std::vector<NerfPointCloud> cpu_points = get_nerf_point_cloud();
-	std::random_shuffle(cpu_points.begin(), cpu_points.end());
-	uint32_t n_elements = (int)(ratio * cpu_points.size()/100.0f);
-
-	FILE* f = native_fopen(filename, "wb");
-	if (!f) {
-		throw std::runtime_error{fmt::format("Failed to open '{}' for writing", filename)};
-	}
-
-	fprintf(f,
-		"ply\n"
-		"format ascii 1.0\n"
-		"element vertex %u\n"
-		"property float x\n"
-		"property float y\n"
-		"property float z\n"
-		"property uchar red\n"
-		"property uchar green\n"
-		"property uchar blue\n"
-		"end_header\n"
-		, n_elements
-	);
-
-	for (size_t i=0; i < n_elements; ++i) {
-		Vector3f p = cpu_points[i].pos;
-		Array4f c = cpu_points[i].rgba;
-		uint8_t c8[3] = { (uint8_t)c.x(), (uint8_t)c.y(), (uint8_t)c.z()};
-		fprintf(f, "%0.3f %0.3f %0.3f %d %d %d\n",
-			p.x(), p.y(), p.z(), 
-			c8[0], c8[1], c8[2]);
-	}
-
-	fclose(f);
-
-	tlog::success() << n_elements << " points saved to " << filename << " ...";
-}
-
 std::string Testbed::gpu_memory_used() {
 	size_t n_bytes = tcnn::total_n_bytes_allocated() + g_total_n_bytes_allocated;
 	return bytes_to_string(n_bytes).c_str();
