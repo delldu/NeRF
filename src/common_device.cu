@@ -92,10 +92,15 @@ void save_stbi_gpu(const fs::path& filename, int width, int height, Array4f *gpu
 	for (int y = 0; y < height; ++y) {
 		for (int x = 0; x < width; ++x) {
 			size_t i = x + y*width;
-			*dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].x() * 255.f, 0.f, 255.f);
-			*dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].y() * 255.f, 0.f, 255.f);
-			*dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].z() * 255.f, 0.f, 255.f);
-			*dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].w() * 255.f, 0.f, 255.f);
+			// *dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].x() * 255.f, 0.f, 255.f);
+			// *dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].y() * 255.f, 0.f, 255.f);
+			// *dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].z() * 255.f, 0.f, 255.f);
+			// *dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].w() * 255.f, 0.f, 255.f);
+			// linear_to_srgb
+			*dst++ = (uint8_t)tcnn::clamp(linear_to_srgb(cpu_rgba[i].x()) * 255.f, 0.f, 255.f);
+			*dst++ = (uint8_t)tcnn::clamp(linear_to_srgb(cpu_rgba[i].y()) * 255.f, 0.f, 255.f);
+			*dst++ = (uint8_t)tcnn::clamp(linear_to_srgb(cpu_rgba[i].z()) * 255.f, 0.f, 255.f);
+			*dst++ = (uint8_t)tcnn::clamp(linear_to_srgb(cpu_rgba[i].w()) * 255.f, 0.f, 255.f);
 		}
 	}
 

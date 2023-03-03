@@ -3797,6 +3797,9 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
 			(float *)render_buffer_view.depth_buffer);
 
 		fs::path camera_filename = camera_dirname/base_filename.with_extension("txt");
+
+		// inline __host__ __device__ Eigen::Matrix3f get_camera_intrinsics(int image_k)
+		// inline __host__ __device__ Eigen::Matrix3f get_camera_extrinsics(int image_k)
 		Eigen::Matrix3f K = Eigen::Matrix3f::Identity();
 		K(0, 0) = m.focal_length.x();
 		K(0, 2) = m.resolution.x()/2.0;
@@ -3834,7 +3837,7 @@ std::vector<NerfPointCloud> Testbed::get_nerf_point_cloud() {
     auto pc_logger = tlog::Logger("Create point cloud ...");
     auto progress = pc_logger.progress(ds.n_images);
 
-	for (int image_k = 0; image_k < 10 /*ds.n_images */; image_k++) {
+	for (int image_k = 0; image_k < 5 /*ds.n_images */; image_k++) {
 		auto& m = ds.metadata[image_k];
 		uint32_t n_elements = m.resolution.y() * m.resolution.x();
 
