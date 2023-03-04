@@ -497,7 +497,8 @@ public:
 	float compute_image_mse(bool quantize_to_byte);
 
 	CudaRenderBufferView render_nerf_image(uint32_t image_k);
-	tcnn::GPUMemory<Ray> get_nerf_rays_from_image(uint32_t image_k);
+	CudaRenderBufferResult render_nerf_image_init();
+
 	void save_nerf_images(const fs::path &dirname);
 	std::vector<NerfPointCloud> get_nerf_point_cloud();
 	void save_nerf_points(float ratio, const char* filename);

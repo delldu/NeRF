@@ -170,6 +170,11 @@ struct CudaRenderBufferView {
 	void clear(cudaStream_t stream) const;
 };
 
+struct CudaRenderBufferResult {
+	Eigen::Array4f* frame_buffer_start = nullptr;
+	float* depth_buffer_start = nullptr;
+};
+
 class CudaRenderBuffer {
 public:
 	CudaRenderBuffer(const std::shared_ptr<SurfaceProvider>& rgba, const std::shared_ptr<SurfaceProvider>& depth = nullptr) : m_rgba_target{rgba}, m_depth_target{depth} {}
