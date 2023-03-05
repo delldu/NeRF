@@ -267,7 +267,16 @@ edges 8-11 go in +z direction from vertex 0-3
 // 	return (thresh - prevf)/(nextf - prevf);
 // }
 
-__global__ void gen_vertices(BoundingBox render_aabb, Matrix3f render_aabb_to_local, Vector3i res_3d, const float* __restrict__ density, int*__restrict__ vertidx_grid, Vector3f* verts_out, float thresh, uint32_t* __restrict__ counters) {
+__global__ void gen_vertices(
+	BoundingBox render_aabb, 
+	Matrix3f render_aabb_to_local, 
+	Vector3i res_3d, 
+	const float* __restrict__ density, 
+	int*__restrict__ vertidx_grid, 
+	Vector3f* verts_out, 
+	float thresh, 
+	uint32_t* __restrict__ counters
+) {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 	uint32_t z = blockIdx.z * blockDim.z + threadIdx.z;
@@ -317,12 +326,19 @@ __global__ void gen_vertices(BoundingBox render_aabb, Matrix3f render_aabb_to_lo
 	}
 }
 
-__global__ void accumulate_1ring(uint32_t num_tris, const uint32_t* indices, const Vector3f* verts_in, Vector4f* verts_out, Vector3f *normals_out) {
+__global__ void accumulate_1ring(
+	uint32_t num_tris, 
+	const uint32_t* indices, 
+	const Vector3f* verts_in, 
+	Vector4f* verts_out, 
+	Vector3f *normals_out
+) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i>=num_tris) return;
 	uint32_t ia=indices[i*3+0];
 	uint32_t ib=indices[i*3+1];
 	uint32_t ic=indices[i*3+2];
+
 	Vector3f pa=verts_in[ia];
 	Vector3f pb=verts_in[ib];
 	Vector3f pc=verts_in[ic];
@@ -354,7 +370,11 @@ __global__ void accumulate_1ring(uint32_t num_tris, const uint32_t* indices, con
 	}
 }
 
-__global__ void compute_centroids(uint32_t num_verts, Vector3f* centroids_out, const Vector4f* verts_in) {
+__global__ void compute_centroids(
+	uint32_t num_verts,
+	Vector3f* centroids_out,
+	const Vector4f* verts_in
+) {
 	uint32_t i = blockIdx.x * blockDim.x + threadIdx.x;
 	if (i>=num_verts) return;
 	Vector4f p = verts_in[i];
@@ -363,7 +383,14 @@ __global__ void compute_centroids(uint32_t num_verts, Vector3f* centroids_out, c
 	centroids_out[i]=c;
 }
 
-__global__ void gen_faces(Vector3i res_3d, const float* __restrict__ density, const int*__restrict__ vertidx_grid, uint32_t* indices_out, float thresh, uint32_t *__restrict__ counters) {
+__global__ void gen_faces(
+	Vector3i res_3d,
+	const float* __restrict__ density,
+	const int*__restrict__ vertidx_grid,
+	uint32_t* indices_out,
+	float thresh, 
+	uint32_t *__restrict__ counters
+) {
 	// marching cubes tables from https://github.com/pmneila/PyMCubes/blob/master/mcubes/src/marchingcubes.cpp which in turn seems to be from https://web.archive.org/web/20181127124338/http://paulbourke.net/geometry/polygonise/
 	// License is BSD 3-clause, which can be found here: https://github.com/pmneila/PyMCubes/blob/master/LICENSE
 	/*
@@ -780,7 +807,16 @@ void compute_mesh_opt_gradients(
 	);
 }
 
-void marching_cubes_gpu(cudaStream_t stream, BoundingBox render_aabb, Matrix3f render_aabb_to_local, Vector3i res_3d, float thresh, const tcnn::GPUMemory<float>& density, tcnn::GPUMemory<Vector3f>& verts_out, tcnn::GPUMemory<uint32_t>& indices_out) {
+void marching_cubes_gpu(
+	cudaStream_t stream,
+	BoundingBox render_aabb,
+	Matrix3f render_aabb_to_local,
+	Vector3i res_3d,
+	float thresh,
+	const tcnn::GPUMemory<float>& density,
+	tcnn::GPUMemory<Vector3f>& verts_out,
+	tcnn::GPUMemory<uint32_t>& indices_out
+) {
 	GPUMemory<uint32_t> counters;
 
 	counters.enlarge(4);
@@ -956,7 +992,14 @@ void save_mesh(
 	tlog::success() << "Save mesh to " << path.str();
 }
 
-void save_density_grid_to_png(const GPUMemory<float>& density, const fs::path& path, Vector3i res3d, float thresh, bool swap_y_z, float density_range) {
+void save_density_grid_to_png(
+	const GPUMemory<float>& density,
+	const fs::path& path,
+	Vector3i res3d,
+	float thresh,
+	bool swap_y_z,
+	float density_range
+) {
 	float density_scale = 128.f / density_range; // map from -density_range to density_range into 0-255
 	std::vector<float> density_cpu;
 	density_cpu.resize(density.size());
@@ -1027,7 +1070,7 @@ void save_density_grid_to_png(const GPUMemory<float>& density, const fs::path& p
 
 	tlog::success() << "Wrote density PNG to " << path.str();
 	tlog::info()
-		<< "  #lattice points=" << N
+		<< " #lattice points=" << N
 		<< " #zero-x voxels=" << num_voxels << " (" << ((num_voxels*100.0)/N) << "%%)"
 		<< " #lattice near zero-x=" << num_lattice_points_near_zero_crossing << " (" << ((num_lattice_points_near_zero_crossing*100.0)/N) << "%%)";
 
@@ -1037,7 +1080,11 @@ void save_density_grid_to_png(const GPUMemory<float>& density, const fs::path& p
 // Distinct from `save_density_grid_to_png` not just in that is writes RGBA, but also
 // in that it writes a sequence of PNGs rather than a single large PNG.
 // TODO: make both methods configurable to do either single PNG or PNG sequence.
-void save_rgba_grid_to_png_sequence(const GPUMemory<Array4f>& rgba, const fs::path& path, Vector3i res3d, bool swap_y_z) {
+void save_rgba_grid_to_png_sequence(
+	const GPUMemory<Array4f>& rgba,
+	const fs::path& path,
+	Vector3i res3d, bool swap_y_z
+) {
 	std::vector<Array4f> rgba_cpu;
 	rgba_cpu.resize(rgba.size());
 	rgba.copy_to_host(rgba_cpu);
@@ -1074,7 +1121,13 @@ void save_rgba_grid_to_png_sequence(const GPUMemory<Array4f>& rgba, const fs::pa
 }
 
 
-void save_rgba_grid_to_raw_file(const GPUMemory<Array4f>& rgba, const fs::path& path, Vector3i res3d, bool swap_y_z, int cascade) {
+void save_rgba_grid_to_raw_file(
+	const GPUMemory<Array4f>& rgba,
+	const fs::path& path,
+	Vector3i res3d,
+	bool swap_y_z,
+	int cascade
+) {
 	std::vector<Array4f> rgba_cpu;
 	rgba_cpu.resize(rgba.size());
 	rgba.copy_to_host(rgba_cpu);

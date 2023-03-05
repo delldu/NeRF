@@ -122,7 +122,7 @@ void save_depth_gpu(const fs::path& filename, int width, int height, float *gpu_
 	for (int y = 0; y < height; ++y) {
 		for (int x = 0; x < width; ++x) {
 			size_t i = x + y*width;
-			depth_rgb(cpu_depth[i], &R, &G, &B);
+			depth_rgb(cpu_depth[i] * 3.0303f, &R, &G, &B);
 			*dst++ = R;	*dst++ = G; *dst++ = B; *dst++ = 255;
 		}
 	}

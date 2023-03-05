@@ -278,7 +278,7 @@ public:
 	class CudaDevice;
 
 	const float* get_inference_extra_dims(cudaStream_t stream) const;
-	void render_nerf(
+	uint32_t render_nerf(
 		cudaStream_t stream,
 		const CudaRenderBufferView& render_buffer,
 		NerfNetwork<precision_t>& nerf_network,
@@ -497,7 +497,6 @@ public:
 	float compute_image_mse(bool quantize_to_byte);
 
 	CudaRenderBufferView render_nerf_image(uint32_t image_k);
-	CudaRenderBufferResult render_nerf_image_init();
 
 	void save_nerf_images(const fs::path &dirname);
 	std::vector<NerfPointCloud> get_nerf_point_cloud();

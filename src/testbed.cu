@@ -1467,7 +1467,10 @@ void Testbed::imgui() {
 			if (m_testbed_mode == ETestbedMode::Nerf) {
 				ImGui::SameLine();
 				if (imgui_colored_button("Save RGBA PNG sequence", 0.2f)) {
-					auto effective_view_dir = flip_y_and_z_axes ? Vector3f{0.0f, 1.0f, 0.0f} : Vector3f{0.0f, 0.0f, 1.0f};
+					// tlog::info() << "flip_y_and_z_axes -- " << flip_y_and_z_axes; // flip_y_and_z_axes -- 0
+
+					auto effective_view_dir = flip_y_and_z_axes ? Vector3f{0.0f, 1.0f, 0.0f}
+						: Vector3f{0.0f, 0.0f, 1.0f}; // ==> {0.0f, 0.0f, 1.0f}
 					// Depth of 0.01f is arbitrarily chosen to produce a visually interpretable range of alpha values.
 					// Alternatively, if the true transparency of a given voxel is desired, one could use the voxel size,
 					// the voxel diagonal, or some form of expected ray length through the voxel, given random directions.
@@ -4146,7 +4149,7 @@ void Testbed::render_frame(
 		render_frame_main(*device, camera_matrix0, camera_matrix1, orig_screen_center, relative_focal_length, nerf_rolling_shutter, foveation, visualized_dimension);
 	}
 
-	render_frame_epilogue(stream, camera_matrix0, prev_camera_matrix, orig_screen_center, relative_focal_length, foveation, prev_foveation, render_buffer, to_srgb);
+	// render_frame_epilogue(stream, camera_matrix0, prev_camera_matrix, orig_screen_center, relative_focal_length, foveation, prev_foveation, render_buffer, to_srgb);
 }
 
 void Testbed::render_frame_main(
@@ -4171,7 +4174,10 @@ void Testbed::render_frame_main(
 	switch (m_testbed_mode) {
 		case ETestbedMode::Nerf:
 			if (!m_render_ground_truth || m_ground_truth_alpha < 1.0f) {
-				render_nerf(device.stream(), device.render_buffer_view(), *device.nerf_network(), device.data().density_grid_bitfield_ptr, focal_length, camera_matrix0, camera_matrix1, nerf_rolling_shutter, screen_center, foveation, visualized_dimension);
+				render_nerf(device.stream(), device.render_buffer_view(), 
+					*device.nerf_network(), device.data().density_grid_bitfield_ptr, 
+					focal_length, camera_matrix0, camera_matrix1, nerf_rolling_shutter,
+					screen_center, foveation, visualized_dimension);
 			}
 			break;
 		case ETestbedMode::Sdf:

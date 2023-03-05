@@ -47,14 +47,12 @@ struct RaysNerfSoa {
 		CUDA_CHECK_THROW(cudaMemcpyAsync(payload, other.payload, size * sizeof(NerfPayload), cudaMemcpyDeviceToDevice, stream));
 	}
 #endif
-
 	void set(Eigen::Array4f* rgba, float* depth, NerfPayload* payload, size_t size) {
 		this->rgba = rgba;
 		this->depth = depth;
 		this->payload = payload;
 		this->size = size;
 	}
-
 	Eigen::Array4f* rgba;
 	float* depth;
 	NerfPayload* payload;
@@ -109,9 +107,11 @@ struct NerfCoordinate {
 	NerfDirection dir;
 };
 
+#if 1 // xxxx3333
 struct NerfPointCloud {
 	Eigen::Vector3f pos;
 	Eigen::Array4f rgba;
 };
+#endif
 
 NGP_NAMESPACE_END
