@@ -14,4 +14,4 @@
 #     --save_image 0,build/lego.png
 
 ./instant-ngp data/nerf/lego --load_model=/tmp/lego.msgpack \
-    --save_points 10.0
+    --save_points 100.0

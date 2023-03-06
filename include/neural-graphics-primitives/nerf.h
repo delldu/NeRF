@@ -103,15 +103,14 @@ struct NerfCoordinate {
 	}
 
 	NerfPosition pos;
-	float dt; // xxxx9999 dt_sum ?
+	float dt; 
 	NerfDirection dir;
 };
 
-#if 1 // xxxx3333
 struct NerfPointCloud {
-	Eigen::Vector3f pos;
-	Eigen::Array4f rgba;
+	uint32_t index;			// index -- image number
+	Eigen::Array3f pos;		// pos.w() for postion filter
+	Eigen::Array4f rgba;	// rgba.w() for color filter
 };
-#endif
 
 NGP_NAMESPACE_END

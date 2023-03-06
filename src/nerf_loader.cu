@@ -742,7 +742,11 @@ NerfDataset load_nerf(const std::vector<fs::path>& jsonpaths, float sharpen_amou
 	return result;
 }
 
-void NerfDataset::set_training_image(int frame_idx, const Eigen::Vector2i& image_resolution, const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu, EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount, bool white_transparent, bool black_transparent, uint32_t mask_color, const Ray *rays) {
+void NerfDataset::set_training_image(int frame_idx, const Eigen::Vector2i& image_resolution,
+	const void* pixels, const void* depth_pixels, float depth_scale, bool image_data_on_gpu,
+	EImageDataType image_type, EDepthDataType depth_type, float sharpen_amount, 
+	bool white_transparent, bool black_transparent, uint32_t mask_color, const Ray *rays
+) {
 	if (frame_idx < 0 || frame_idx >= n_images) {
 		throw std::runtime_error{"NerfDataset::set_training_image: invalid frame index"};
 	}
