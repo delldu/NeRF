@@ -1399,7 +1399,6 @@ __device__ LossAndGradient loss_and_gradient(const Vector3f& target, const Vecto
 	}
 }
 
-// xxxx9999
 __global__ void compute_loss_kernel_train_nerf(
 	const uint32_t n_rays,
 	BoundingBox aabb,
@@ -1877,9 +1876,7 @@ __global__ void shade_kernel_nerf(
 	ERenderMode render_mode,
 	bool train_in_linear_colors, // train_in_linear_colors -- 0
 	Array4f* __restrict__ frame_buffer,
-	float* __restrict__ depth_buffer,
-	Array3f* __restrict__ point_pos,
-	Array4f* __restrict__ point_color
+	float* __restrict__ depth_buffer
 ) {
 	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
 	if (i >= n_elements) return;
@@ -1905,14 +1902,6 @@ __global__ void shade_kernel_nerf(
 	frame_buffer[payload.idx] = tmp + frame_buffer[payload.idx] * (1.0f - tmp.w());
 	if (render_mode != ERenderMode::Slice && tmp.w() > 0.2f && depth) {
 		depth_buffer[payload.idx] = depth[i];
-	}
-
-	if (point_pos && point_color && depth) {
-		Vector3f cam_fwd = camera_matrix.col(2); // xxxx????
-		float costheta = payload.dir.dot(cam_fwd) / (payload.dir.norm()*cam_fwd.norm())
-			+ 1e-10f;
-	 	point_pos[i] = (payload.origin + depth[i]/costheta * payload.dir).array();
-	 	point_color[i] = frame_buffer[payload.idx];
 	}
 }
 
@@ -2182,7 +2171,8 @@ void Testbed::NerfTracer::init_rays_from_camera(
 	enlarge(n_pixels, padded_output_width, n_extra_dims, stream);
 
 	const dim3 threads = { 16, 8, 1 };
-	const dim3 blocks = { div_round_up((uint32_t)resolution.x(), threads.x), div_round_up((uint32_t)resolution.y(), threads.y), 1 };
+	const dim3 blocks = { div_round_up((uint32_t)resolution.x(), threads.x),
+		div_round_up((uint32_t)resolution.y(), threads.y), 1 };
 
 	init_rays_with_payload_kernel_nerf<<<blocks, threads, 0, stream>>>(
 		sample_index, // sample_index -- 0
@@ -2539,7 +2529,6 @@ uint32_t Testbed::render_nerf(
 		); // ==> n_hit, rays_hit ...
 	}
 
-	// xxxx9999 ==> m_rays_hit
 	RaysNerfSoa& rays_hit = m_render_mode == ERenderMode::Slice ? tracer.rays_init() : tracer.rays_hit();
 
 	if (m_render_mode == ERenderMode::Slice) {
@@ -2574,9 +2563,7 @@ uint32_t Testbed::render_nerf(
 			m_render_mode,
 			m_nerf.training.linear_colors, // m_nerf.training.linear_colors -- 0
 			render_buffer_view.frame_buffer,
-			render_buffer_view.depth_buffer,
-			nullptr,
-			nullptr // point_cloud is nullptr for depth is nullptr 
+			render_buffer_view.depth_buffer
 		);
 		return n_hit;
 	}
@@ -2591,9 +2578,7 @@ uint32_t Testbed::render_nerf(
 		m_render_mode,
 		m_nerf.training.linear_colors, // m_nerf.training.linear_colors -- 0
 		render_buffer_view.frame_buffer,
-		render_buffer_view.depth_buffer,
-		render_buffer_view.point_pos,
-		render_buffer_view.point_color
+		render_buffer_view.depth_buffer
 	);
 	// rgba ==> render_buffer_view
 	//   frame_buffer[payload.idx] = rgba[i] + frame_buffer[payload.idx] * (1.0f - rgba[i].w());
@@ -2616,7 +2601,10 @@ uint32_t Testbed::render_nerf(
 	return n_hit;
 }
 
-void Testbed::Nerf::Training::set_camera_intrinsics(int frame_idx, float fx, float fy, float cx, float cy, float k1, float k2, float p1, float p2, float k3, float k4, bool is_fisheye) {
+void Testbed::Nerf::Training::set_camera_intrinsics(
+	int frame_idx, float fx, float fy, float cx, float cy, 
+	float k1, float k2, float p1, float p2, float k3, float k4, bool is_fisheye
+) {
 	if (frame_idx < 0 || frame_idx >= dataset.n_images) {
 		return;
 	}
@@ -2642,7 +2630,8 @@ void Testbed::Nerf::Training::set_camera_intrinsics(int frame_idx, float fx, flo
 void Testbed::Nerf::Training::set_camera_extrinsics_rolling_shutter(int frame_idx, 
 	Eigen::Matrix<float, 3, 4> camera_to_world_start, 
 	Eigen::Matrix<float, 3, 4> camera_to_world_end, 
-	const Vector4f& rolling_shutter, bool convert_to_ngp) {
+	const Vector4f& rolling_shutter, bool convert_to_ngp
+) {
 	if (frame_idx < 0 || frame_idx >= dataset.n_images) {
 		return;
 	}
@@ -2686,7 +2675,10 @@ void Testbed::Nerf::Training::reset_camera_extrinsics() {
 	}
 }
 
-void Testbed::Nerf::Training::export_camera_extrinsics(const fs::path& path, bool export_extrinsics_in_quat_format) {
+void Testbed::Nerf::Training::export_camera_extrinsics(
+	const fs::path& path, 
+	bool export_extrinsics_in_quat_format
+) {
 	tlog::info() << "Saving a total of " << n_images_for_training << " poses to " << path.str();
 	nlohmann::json trajectory;
 	for(int i = 0; i < n_images_for_training; ++i) {
@@ -3832,15 +3824,12 @@ CudaRenderBufferView Testbed::render_nerf_image(uint32_t image_k) {
 	CudaRenderBufferView render_buffer_view;
 
 	GPUMemoryArena::Allocation alloc;
-	auto scratch = allocate_workspace_and_distribute<Array4f, float, Array3f, Array4f>
+	auto scratch = allocate_workspace_and_distribute<Array4f, float>
 	(m_stream.get(), &alloc,
-	 n_pixels, n_pixels, // xxxx3333 ????
-	 n_pixels * MAX_STEPS_INBETWEEN_COMPACTION, n_pixels*MAX_STEPS_INBETWEEN_COMPACTION);
+	 n_pixels, n_pixels);
 
 	render_buffer_view.frame_buffer = (Array4f *)std::get<0>(scratch);
 	render_buffer_view.depth_buffer = (float *)std::get<1>(scratch);
-	render_buffer_view.point_pos = (Array3f *)std::get<2>(scratch);
-	render_buffer_view.point_color = (Array4f *)std::get<3>(scratch);
 	render_buffer_view.resolution = resolution;
 	render_buffer_view.spp = 0;
 	render_buffer_view.hidden_area_mask = nullptr;
@@ -3848,7 +3837,7 @@ CudaRenderBufferView Testbed::render_nerf_image(uint32_t image_k) {
 
 	// Start rendering ...
 	m_render_mode = ERenderMode::Shade;
-	render_buffer_view.point_count = render_nerf(
+	render_nerf(
 		m_stream.get(),
 		render_buffer_view,
 		*m_nerf_network,
@@ -3973,7 +3962,7 @@ __global__ void fusion_point_cloud_kernel(
 	pc_input[i].rgba.w() = (count >= 5)? 1.0f : 0.0f;
 }
 
-void Testbed::save_nerf_points(float ratio, const char* filename) {
+void Testbed::save_nerf_points(const fs::path &filename) {
 	if (m_testbed_mode != ETestbedMode::Nerf) {
 		tlog::warning() << "Save point cloud only for NeRF.";
 		return;
@@ -3986,7 +3975,7 @@ void Testbed::save_nerf_points(float ratio, const char* filename) {
 
 	std::vector<NerfPointCloud> all_cpu_points;
 
-	for (int image_k = 0; image_k < 10 /*ds.n_images */; image_k++) {
+	for (int image_k = 0; image_k < ds.n_images; image_k++) {
 		Eigen::Vector2i resolution = ds.metadata[image_k].resolution;
 		Eigen::Vector2f focal_length = ds.metadata[image_k].focal_length;
 		Eigen::Matrix<float, 3, 4> camera_matrix = ds.xforms[image_k].start;
@@ -4034,82 +4023,19 @@ void Testbed::save_nerf_points(float ratio, const char* filename) {
 				all_cpu_points.push_back(pc);
 			}
 		}
-#if 0 // xxxx3333
-		n_count = render_result.point_count;
-		if (n_count == 0)
-			continue;
-
-		std::vector<Eigen::Array3f> image_cpu_point_pos(n_count);
-		CUDA_CHECK_THROW(cudaMemcpy(
-			image_cpu_point_pos.data(), 
-			render_result.point_pos,
-			n_count * sizeof(Array3f),
-			cudaMemcpyDeviceToHost));
-
-
-		std::vector<Eigen::Array4f> image_cpu_point_color(n_count);
-		CUDA_CHECK_THROW(cudaMemcpy(
-			image_cpu_point_color.data(), 
-			render_result.point_color,
-			n_count * sizeof(Array4f),
-			cudaMemcpyDeviceToHost));
-
-		std::vector<NerfPointCloud> image_cpu_points;
-		for (int i = 0; i < n_count; i++) {
-			if (image_cpu_depth[i] >= 1.0f && image_cpu_depth[i] < MAX_DEPTH()
-				&& image_cpu_point_color[i].w() > 0.01f) {
-				NerfPointCloud pc;
-				pc.index = image_k;
-				pc.pos = image_cpu_point_pos[i];
-				pc.rgba = image_cpu_point_color[i];
-				image_cpu_points.push_back(pc);
-			}
-		}
-
-		if (image_cpu_points.size() > 0) {
-			GPUMemory<NerfPointCloud> image_gpu_points(image_cpu_points.size());
-			image_gpu_points.copy_from_host(image_cpu_points);
-			linear_kernel(fusion_point_cloud_kernel, 0, m_stream.get(),
-				image_cpu_points.size(),
-				ds.n_images,
-				ds.metadata_gpu.data(),
-				m_nerf.training.transforms_gpu.data(),		
-				image_gpu_points.data()
-			);
-			image_gpu_points.copy_to_host(image_cpu_points);
-
-			// uint32_t delete_count = 0;
-			for (int i = 0; i < image_cpu_points.size(); i++) {
-				// if (image_cpu_points[i].rgba.w() <= 0.5f) {
-				// 	delete_count++;
-				// 	continue;
-				// }
-				NerfPointCloud pc;
-				pc.index = image_k;
-				pc.pos = image_cpu_point_pos[i];
-				pc.rgba = image_cpu_point_color[i];
-				all_cpu_points.push_back(pc);
-			}
-			// printf("delete_count -- %d\n", delete_count);
-
-			image_gpu_points.free_memory();
-		}
-		image_cpu_points.clear();
-#endif
         progress.update(image_k);
 	}
     pc_logger.success("OK !");
 
 	uint32_t n_elements = all_cpu_points.size();
-	printf("n_elements -----> %d\n", n_elements);
 	if (n_elements >= 5*1024*1024) {
 		n_elements = 5*1024*1024;
 		std::random_shuffle(all_cpu_points.begin(), all_cpu_points.end());
 	}
 
-	FILE* f = native_fopen(filename, "wb");
+	FILE* f = native_fopen(filename.str(), "wb");
 	if (!f) {
-		throw std::runtime_error{fmt::format("Failed to open '{}' for writing", filename)};
+		throw std::runtime_error{fmt::format("Failed to open '{}' for writing", filename.str())};
 	}
 
 	fprintf(f,

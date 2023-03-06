@@ -4,14 +4,10 @@
 # --max_time 5
 
 # ./instant-ngp data/nerf/lego --load_model=/tmp/lego.msgpack \
-#     --save_model=/tmp/lego.msgpack --save_mesh "build/lego.obj"
-
-
-# ./instant-ngp data/nerf/lego --load_model=/tmp/lego.msgpack \
-#     --save_image 10,build/lego.png
+#     --save_model=/tmp/lego.msgpack --save_mesh
 
 # ./instant-ngp data/nerf/lego --load_model=/tmp/lego.msgpack --no-train \
-#     --save_image 0,build/lego.png
+#     --save_images
 
 ./instant-ngp data/nerf/lego --load_model=/tmp/lego.msgpack \
-    --save_points 100.0
+    --save_points

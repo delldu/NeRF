@@ -379,7 +379,6 @@ NGP_HOST_DEVICE inline void iterative_opencv_fisheye_lens_undistortion(const T* 
 	iterative_lens_undistortion(params, u, v, opencv_fisheye_lens_distortion_delta<T>);
 }
 
-// xxxx9999
 inline NGP_HOST_DEVICE Ray pixel_to_ray_pinhole(
 	uint32_t spp,
 	const Eigen::Vector2i& pixel,
@@ -447,7 +446,6 @@ inline NGP_HOST_DEVICE Eigen::Vector3f equirectangular_to_dir(const Eigen::Vecto
 	return {sp * st, ct, cp * st};
 }
 
-// xxxx9999
 inline NGP_HOST_DEVICE Ray uv_to_ray(
 	uint32_t spp,
 	const Eigen::Vector2f& uv,

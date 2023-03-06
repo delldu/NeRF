@@ -157,10 +157,10 @@ int main_func(const std::vector<std::string>& arguments) {
 		{"save_images"},
 	};
 
-	ValueFlag<float> save_points_flag{
+	Flag save_points_flag{
 		parser,
-		"S%",
-		"Save point cloud (sample S%) to output/3d_pc.ply for NeRF.",
+		"SAVE_POINTS",
+		"Save point cloud to output/pc.ply for NeRF.",
 		{"save_points"},
 	};
 
@@ -293,7 +293,8 @@ int main_func(const std::vector<std::string>& arguments) {
 	}
 
 	fs::path output_dir = "output";
-	if (output_dir_flag || save_model_flag || save_images_flag || save_mesh_flag || save_points_flag) {
+	if (output_dir_flag || save_model_flag || save_images_flag || save_mesh_flag 
+		|| save_points_flag) {
 		output_dir = output_dir_flag ? get(output_dir_flag) : "output";
 		if (! output_dir.is_directory()) {
 			fs::create_directory(output_dir);
@@ -329,14 +330,8 @@ int main_func(const std::vector<std::string>& arguments) {
 		if (testbed.m_testbed_mode != ETestbedMode::Nerf) {
 			tlog::warning() << "Save point cloud only for NeRF.";
 		} else {
-			float ratio = get(save_points_flag);
-		    fs::path filename = output_dir/"3d_pc.ply";
-			if (ratio < 0.0f)
-				ratio = 100.0f;
-			if (ratio > 100.0f)
-				ratio = 100.0f;
-
-			testbed.save_nerf_points(ratio, filename.str().c_str());
+		    fs::path filename = output_dir/"pc.ply";
+			testbed.save_nerf_points(filename);
 		}
 	}
 

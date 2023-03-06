@@ -499,7 +499,7 @@ public:
 	CudaRenderBufferView render_nerf_image(uint32_t image_k);
 
 	void save_nerf_images(const fs::path &dirname);
-	void save_nerf_points(float ratio, const char* filename);
+	void save_nerf_points(const fs::path &filename);
 
 	std::string gpu_memory_used();
 
@@ -914,8 +914,8 @@ public:
 	int m_visualized_dimension = -1;
 	int m_visualized_layer = 0;
 
-	struct View { // xxxx8888
-		std::shared_ptr<CudaRenderBuffer> render_buffer; // xxxx8888
+	struct View {
+		std::shared_ptr<CudaRenderBuffer> render_buffer;
 		Eigen::Vector2i full_resolution = {1, 1};
 		int visualized_dimension = 0;
 

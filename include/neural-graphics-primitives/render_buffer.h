@@ -167,11 +167,6 @@ struct CudaRenderBufferView {
 
 	std::shared_ptr<Buffer2D<uint8_t>> hidden_area_mask = nullptr;
 
-	// Point cloud output result
-	uint32_t point_count = 0;
-	Eigen::Array3f* point_pos = nullptr;
-	Eigen::Array4f* point_color = nullptr;
-
 	void clear(cudaStream_t stream) const;
 };
 
