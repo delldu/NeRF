@@ -913,8 +913,7 @@ Eigen::Matrix<float, 3, 4> log_space_lerp(const Eigen::Matrix<float, 3, 4>& begi
 
 inline NGP_HOST_DEVICE void depth_rgb(float depth, uint8_t *R, uint8_t *G, uint8_t *B)
 {
-	depth = tcnn::clamp(depth, 0.0f, MAX_DEPTH());
-	uint32_t rgb = (uint32_t)((MAX_DEPTH() - depth) * 256.0f);
+	uint32_t rgb = (uint32_t)(depth * 1000.0f);
 	*R = (rgb & 0xff0000) >> 16;
 	*G = (rgb & 0x00ff00) >> 8;
 	*B = (rgb & 0xff);
@@ -923,7 +922,7 @@ inline NGP_HOST_DEVICE void depth_rgb(float depth, uint8_t *R, uint8_t *G, uint8
 inline NGP_HOST_DEVICE void rgb_depth(uint8_t R, uint8_t G, uint8_t B, float *depth)
 {
 	uint32_t rgb = (R << 16) | (G << 8) | (B);
-	*depth = MAX_DEPTH() - (float)rgb / 256.0f;
+	*depth = (float)rgb / 1000.0f;
 }
 
 tcnn::GPUMemory<float> load_exr_gpu(const fs::path& path, int* width, int* height);

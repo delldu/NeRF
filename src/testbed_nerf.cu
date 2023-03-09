@@ -3902,16 +3902,20 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
 		// Eigen::Matrix<float, 3, 4> RT = 
 		// 	ds.ngp_matrix_to_nerf(ds.xforms[image_k].start);
 		Eigen::Matrix<float, 3, 4> RT = ds.xforms[image_k].start;
-		Eigen::Matrix<float, 3, 4> camera_matrix = K * RT;
+		// Eigen::Matrix<float, 3, 4> camera_matrix = K * RT;
 		FILE* f = native_fopen(camera_filename, "wb");
 		if (!f) {
 			throw std::runtime_error{fmt::format("Failed to open '{}' for writing", 
 				camera_filename.str())};
 		}
-		for (int r = 0; r < camera_matrix.rows(); r++) {
-			for (int c = 0; c < camera_matrix.cols(); c++) {
-				fprintf(f, "%.4f%s", camera_matrix(r, c), 
-					c == camera_matrix.cols() - 1? "\n":", ");
+		for (int r = 0; r < RT.rows(); r++) {
+			for (int c = 0; c < K.cols() + RT.cols(); c++) {
+				if (c < 3) {
+					fprintf(f, "%.4f%s", K(r, c), " ");
+				}
+				else {
+					fprintf(f, "%.4f%s", RT(r, c - 3), c == 3 + RT.cols() - 1? "\n":" ");
+				}
 			}
 		}
 		fclose(f);
