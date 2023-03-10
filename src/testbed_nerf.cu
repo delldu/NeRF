@@ -3889,7 +3889,7 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
 
 		fs::path depth_filename = depth_dirname/base_filename.with_extension("png");
 		save_depth_gpu(depth_filename, m.resolution.x(), m.resolution.y(), 
-			(float *)render_result.depth_buffer);
+			(float *)render_result.depth_buffer, m.focal_length.x());
 
 		fs::path camera_filename = camera_dirname/base_filename.with_extension("txt");
 		// inline __host__ __device__ Eigen::Matrix3f get_camera_intrinsics(int image_k)
@@ -3926,45 +3926,6 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
     save_image_logger.success("OK !");
 }
 
-
-TCNN_HOST_DEVICE void world_to_image(
-	const Eigen::Vector3f X, // world
-	const Eigen::Matrix<float, 3, 4> camera_matrix,
-	int * __restrict__ u,
-	int * __restrict__ v,
-	float * __restrict__ depth
-) {
-	Eigen::Vector3f duv = camera_matrix.block<3,3>(0, 0) * X;
-	*u = int(duv.x()/duv.z() + 0.5f);
-	*v = int(duv.y()/duv.z() + 0.5f);
-	*depth = duv.z();
-}
-
-__global__ void fusion_point_cloud_kernel(
-	const uint32_t n_elements,
-	const uint32_t n_images,
-	const TrainingImageMetadata* __restrict__ metadata,
-	const TrainingXForm* training_xforms,
-	NerfPointCloud * __restrict__ pc_input
-) {
-	const uint32_t i = threadIdx.x + blockIdx.x * blockDim.x;
-	if (i >= n_elements) return;
-
-	int u, v;
-	float depth;
-	uint32_t count = 0;
-
-	for (uint32_t image_k = 0; image_k < n_images && count < 6; image_k++) {
-		auto camera_matrix = training_xforms[image_k].start; // ????
-		auto res = metadata[image_k].resolution; // xxxx????
-
-		world_to_image(pc_input[i].pos, camera_matrix, &u, &v, &depth);
-		if (u >= 0 && u < res.y() && v >=0 && v < res.x())
-			count++;
-	}
-
-	pc_input[i].rgba.w() = (count >= 5)? 1.0f : 0.0f;
-}
 
 void Testbed::save_nerf_points(const fs::path &filename) {
 	if (m_testbed_mode != ETestbedMode::Nerf) {
@@ -4022,8 +3983,16 @@ void Testbed::save_nerf_points(const fs::path &filename) {
 				// ray.d has been normalized, so simple the following formula
 				// float costheta = ray.d.dot(camera_fwd)/(ray.d.norm() * camera_fwd.norm());
 				float costheta = ray.d.dot(camera_fwd);
+
+				// image_cpu_depth[i] *= focal_length.x(); // depth_scale
 				pc.pos = (ray.o + image_cpu_depth[i]/costheta * ray.d).array();
+
 				pc.rgba = image_cpu_color[i];
+				pc.rgba.x() = linear_to_srgb(pc.rgba.x());
+				pc.rgba.y() = linear_to_srgb(pc.rgba.y());
+				pc.rgba.z() = linear_to_srgb(pc.rgba.z());
+				pc.rgba.w() = linear_to_srgb(pc.rgba.w());
+
 				all_cpu_points.push_back(pc);
 			}
 		}
@@ -4067,7 +4036,7 @@ void Testbed::save_nerf_points(const fs::path &filename) {
 
 	fclose(f);
 
-	tlog::success() << n_elements << " points saved to " << filename << " ...";
+	tlog::success() << n_elements << "/" << all_cpu_points.size() <<  "points saved to " << filename << " ...";
 }
 
 

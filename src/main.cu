@@ -153,7 +153,7 @@ int main_func(const std::vector<std::string>& arguments) {
 	Flag save_images_flag{
 		parser,
 		"SAVE_IMAGES",
-		"Render images/depth to output for NeRF.",
+		"Save image/depth/camera to output for NeRF.",
 		{"save_images"},
 	};
 
