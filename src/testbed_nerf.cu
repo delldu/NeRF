@@ -3899,22 +3899,22 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
 		K(0, 2) = m.resolution.x()/2.0;
 		K(1, 1) = m.focal_length.y();
 		K(1, 2) = m.resolution.y()/2.0;
-		// Eigen::Matrix<float, 3, 4> RT = 
+		// Eigen::Matrix<float, 3, 4> Rt = 
 		// 	ds.ngp_matrix_to_nerf(ds.xforms[image_k].start);
-		Eigen::Matrix<float, 3, 4> RT = ds.xforms[image_k].start;
-		// Eigen::Matrix<float, 3, 4> camera_matrix = K * RT;
+		Eigen::Matrix<float, 3, 4> Rt = ds.xforms[image_k].start;
+		// Eigen::Matrix<float, 3, 4> camera_matrix = K * Rt;
 		FILE* f = native_fopen(camera_filename, "wb");
 		if (!f) {
 			throw std::runtime_error{fmt::format("Failed to open '{}' for writing", 
 				camera_filename.str())};
 		}
-		for (int r = 0; r < RT.rows(); r++) {
-			for (int c = 0; c < K.cols() + RT.cols(); c++) {
+		for (int r = 0; r < Rt.rows(); r++) {
+			for (int c = 0; c < K.cols() + Rt.cols(); c++) {
 				if (c < 3) {
 					fprintf(f, "%.4f%s", K(r, c), " ");
 				}
 				else {
-					fprintf(f, "%.4f%s", RT(r, c - 3), c == 3 + RT.cols() - 1? "\n":" ");
+					fprintf(f, "%.4f%s", Rt(r, c - 3), c == 3 + Rt.cols() - 1? "\n":" ");
 				}
 			}
 		}
@@ -3986,7 +3986,11 @@ void Testbed::save_nerf_points(const fs::path &filename) {
 
 				// image_cpu_depth[i] *= focal_length.x(); // depth_scale
 				pc.pos = (ray.o + image_cpu_depth[i]/costheta * ray.d).array();
-
+				// if (u % 100 == 0 && v % 100 == 0) {
+				// 	std::cout << "ray.o --- " << ray.o << std::endl;
+				// 	std::cout << "depth --- " << image_cpu_depth[i] << std::endl;
+				// 	std::cout << "pc.pos --- " << pc.pos << std::endl;
+				// }
 				pc.rgba = image_cpu_color[i];
 				pc.rgba.x() = linear_to_srgb(pc.rgba.x());
 				pc.rgba.y() = linear_to_srgb(pc.rgba.y());

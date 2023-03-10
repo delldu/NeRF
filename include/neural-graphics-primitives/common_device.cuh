@@ -32,7 +32,7 @@ using precision_t = tcnn::network_precision_t;
 // Chosen somewhat low (rather than std::numeric_limits<float>::infinity())
 // to permit numerically stable reprojection and DLSS operation,
 // even when rendering the infinitely distant horizon.
-inline constexpr __device__ float MAX_DEPTH() { return 16384.0f; }
+inline constexpr __device__ float MAX_DEPTH() { return 8192.0f; }
 
 template <typename T>
 class Buffer2D {
@@ -503,6 +503,7 @@ inline NGP_HOST_DEVICE Ray uv_to_ray(
 	dir = camera_matrix.block<3, 3>(0, 0) * dir;
 
 	Eigen::Vector3f origin = camera_matrix.block<3, 3>(0, 0) * head_pos + camera_matrix.col(3);
+
 	if (aperture_size != 0.0f) {
 		Eigen::Vector3f lookat = origin + dir * focus_z;
 		Eigen::Vector2f blur = aperture_size * square2disk_shirley(ld_random_val_2d(spp, uv.cwiseProduct(resolution.cast<float>()).cast<int>().dot(Eigen::Vector2i{19349663, 96925573})) * 2.0f - Eigen::Vector2f::Ones());
