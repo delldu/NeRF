@@ -3884,12 +3884,12 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
 		CudaRenderBufferView render_result = render_nerf_image(image_k);
 
 		fs::path image_filename = image_dirname/base_filename.with_extension("png");
-		save_stbi_gpu(image_filename, m.resolution.x(), m.resolution.y(), 
+		save_stbi_gpu(image_filename.str(), m.resolution.x(), m.resolution.y(), 
 				(Array4f *)render_result.frame_buffer);
 
 		fs::path depth_filename = depth_dirname/base_filename.with_extension("png");
-		save_depth_gpu(depth_filename, m.resolution.x(), m.resolution.y(), 
-			(float *)render_result.depth_buffer, m.focal_length.x());
+		save_depth_gpu(depth_filename.str(), m.resolution.x(), m.resolution.y(), 
+			(float *)render_result.depth_buffer);
 
 		fs::path camera_filename = camera_dirname/base_filename.with_extension("txt");
 		// inline __host__ __device__ Eigen::Matrix3f get_camera_intrinsics(int image_k)
@@ -3966,7 +3966,8 @@ void Testbed::save_nerf_points(const fs::path &filename) {
 		for (uint32_t v = 0; v < resolution.y(); v++) {
 			for (uint32_t u = 0; u < resolution.x(); u++) {
 				uint32_t i = v * resolution.x() + u;
-				if (image_cpu_depth[i] >= MAX_DEPTH())
+				// linear_to_srgb(image_cpu_color[i].w()） < 0.5f -- skip masked color
+				if (linear_to_srgb(image_cpu_color[i].w()) < 0.5f || image_cpu_depth[i] >= MAX_DEPTH())
 					continue;
 
 				Vector2f uv = Vector2f{(float)u, 

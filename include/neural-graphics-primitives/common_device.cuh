@@ -32,7 +32,7 @@ using precision_t = tcnn::network_precision_t;
 // Chosen somewhat low (rather than std::numeric_limits<float>::infinity())
 // to permit numerically stable reprojection and DLSS operation,
 // even when rendering the infinitely distant horizon.
-inline constexpr __device__ float MAX_DEPTH() { return 8192.0f; }
+inline constexpr __device__ float MAX_DEPTH() { return 16384.0f; }
 
 template <typename T>
 class Buffer2D {
@@ -912,23 +912,23 @@ inline NGP_HOST_DEVICE float read_depth(Eigen::Vector2f pos, const Eigen::Vector
 
 Eigen::Matrix<float, 3, 4> log_space_lerp(const Eigen::Matrix<float, 3, 4>& begin, const Eigen::Matrix<float, 3, 4>& end, float t);
 
-inline NGP_HOST_DEVICE void depth_rgb(float depth, uint8_t *R, uint8_t *G, uint8_t *B)
+inline void depth_rgb(float depth, uint8_t *R, uint8_t *G, uint8_t *B)
 {
-	uint32_t rgb = (uint32_t)(depth);
+	uint32_t rgb = (uint32_t)(depth * 512.0f);
 	*R = (rgb & 0xff0000) >> 16;
 	*G = (rgb & 0x00ff00) >> 8;
 	*B = (rgb & 0xff);
 }
 
-inline NGP_HOST_DEVICE void rgb_depth(uint8_t R, uint8_t G, uint8_t B, float *depth)
+inline void rgb_depth(uint8_t R, uint8_t G, uint8_t B, float *depth)
 {
-	uint32_t rgb = (R << 16) | (G << 8) | (B);
-	*depth = (float)rgb;
+	uint32_t rgb = ((uint32_t)R << 16) | ((uint32_t)G << 8) | ((uint32_t)B);
+	*depth = (float)rgb/512.0f;
 }
 
 tcnn::GPUMemory<float> load_exr_gpu(const fs::path& path, int* width, int* height);
 tcnn::GPUMemory<float> load_stbi_gpu(const fs::path& path, int* width, int* height);
-void save_stbi_gpu(const fs::path& filename, int width, int height, Eigen::Array4f *gpu_rgba);
-void save_depth_gpu(const fs::path& filename, int width, int height, float *gpu_depth, float depth_scale);
+void save_stbi_gpu(const std::string& filename, int width, int height, Eigen::Array4f *gpu_rgba);
+void save_depth_gpu(const std::string& filename, int width, int height, float *gpu_depth);
 
 NGP_NAMESPACE_END

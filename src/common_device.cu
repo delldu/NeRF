@@ -80,7 +80,7 @@ GPUMemory<float> load_stbi_gpu(const fs::path& path, int* width, int* height) {
 	return result;
 }
 
-void save_stbi_gpu(const fs::path& filename, int width, int height, Array4f *gpu_rgba) {
+void save_stbi_gpu(const std::string& filename, int width, int height, Array4f *gpu_rgba) {
 	std::vector<Array4f> cpu_rgba;
 	cpu_rgba.resize(width * height);
 
@@ -92,11 +92,6 @@ void save_stbi_gpu(const fs::path& filename, int width, int height, Array4f *gpu
 	for (int y = 0; y < height; ++y) {
 		for (int x = 0; x < width; ++x) {
 			size_t i = x + y*width;
-			// *dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].x() * 255.f, 0.f, 255.f);
-			// *dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].y() * 255.f, 0.f, 255.f);
-			// *dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].z() * 255.f, 0.f, 255.f);
-			// *dst++ = (uint8_t)tcnn::clamp(cpu_rgba[i].w() * 255.f, 0.f, 255.f);
-			// linear_to_srgb
 			*dst++ = (uint8_t)tcnn::clamp(linear_to_srgb(cpu_rgba[i].x()) * 255.f, 0.f, 255.f);
 			*dst++ = (uint8_t)tcnn::clamp(linear_to_srgb(cpu_rgba[i].y()) * 255.f, 0.f, 255.f);
 			*dst++ = (uint8_t)tcnn::clamp(linear_to_srgb(cpu_rgba[i].z()) * 255.f, 0.f, 255.f);
@@ -104,11 +99,12 @@ void save_stbi_gpu(const fs::path& filename, int width, int height, Array4f *gpu
 		}
 	}
 
-	write_stbi(filename, width, height, 4, pngpixels);
+	// write_stbi(filename, width, height, 4, pngpixels);
+	stbi_write_png(filename.c_str(), width, height, 4, pngpixels, 0);
 	free(pngpixels);
 }
 
-void save_depth_gpu(const fs::path& filename, int width, int height, float *gpu_depth, float depth_scale) {
+void save_depth_gpu(const std::string& filename, int width, int height, float *gpu_depth) {
 	uint8_t R, G, B;
 
 	std::vector<float> cpu_depth;
@@ -122,14 +118,33 @@ void save_depth_gpu(const fs::path& filename, int width, int height, float *gpu_
 	for (int y = 0; y < height; ++y) {
 		for (int x = 0; x < width; ++x) {
 			size_t i = x + y*width;
-			depth_rgb(cpu_depth[i] * depth_scale, &R, &G, &B);
-
-			*dst++ = R;	*dst++ = G; *dst++ = B; *dst++ = 255;
+			depth_rgb(cpu_depth[i], &R, &G, &B);
+			*dst++ = R;	*dst++ = G; *dst++ = B; *dst++ = (cpu_depth[i] >= MAX_DEPTH())? 0 : 255;
 		}
 	}
-
-	write_stbi(filename, width, height, 4, pngpixels);
+	stbi_write_png(filename.c_str(), width, height, 4, pngpixels, 0);
 	free(pngpixels);
+
+	// int iw, ih, n;
+	// unsigned char *idata = stbi_load(filename.c_str(), &iw, &ih, &n, 0);
+	// for (int y = 0; y < ih; ++y) {
+	// 	for (int x = 0; x < iw; ++x) {
+	// 		size_t i = x + y*width;
+	//     	R = (uint8_t)(idata[4*i + 0]);
+	//     	G = (uint8_t)(idata[4*i + 1]);
+	//     	B = (uint8_t)(idata[4*i + 2]);
+
+	//     	float t;
+	//     	rgb_depth(R, G, B, &t);
+	//     	if (y % 100 == 0 && x % 100 == 0) {
+	// 	    	printf("%d (%d, %d, %d)----- R = %x, G = %x, B = %x, t = %.4f\n",
+	// 	    		i, idata[4*i + 0], idata[4*i + 1], idata[4*i + 2], R, G, B, t);
+	//     	}
+	// 	}
+	// }
+    // free(idata);
+
+    // exit(0);
 }
 
 NGP_NAMESPACE_END
