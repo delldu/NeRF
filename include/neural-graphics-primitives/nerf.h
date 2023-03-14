@@ -108,8 +108,7 @@ struct NerfCoordinate {
 };
 
 struct NerfPointCloud {
-	uint32_t index;			// index -- image number
-	Eigen::Array3f pos;		// pos.w() for postion filter
+	Eigen::Array3f pos;		// pos
 	Eigen::Array4f rgba;	// rgba.w() for color filter
 };
 

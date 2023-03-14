@@ -8,32 +8,5 @@
 #
 #! /bin/sh
 
-usage()
-{
-    echo "Usage: $0 [options] input output"
-    echo "Options:"
-    echo "    save_images"
-    echo "    save_points"
-
-    exit 1
-}
-
-save_images()
-{
-    ./instant-ngp data/nerf/lego --load_model=/tmp/lego.msgpack --save_images
-}
-
-
-save_points()
-{
-    ./instant-ngp data/nerf/lego --load_model=/tmp/lego.msgpack --save_points
-}
-
-
-if [ "$*" == "" ] ;
-then
-    usage
-else
-    eval "$*"
-fi
-
+./instant-ngp data/nerf/lego/transforms_train.json --load_model=/tmp/lego.msgpack \
+    --save_render_result --output lego_output

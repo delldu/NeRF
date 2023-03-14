@@ -499,7 +499,6 @@ public:
 	CudaRenderBufferView render_nerf_image(uint32_t image_k);
 
 	void save_nerf_images(const fs::path &dirname);
-	void save_nerf_points(const fs::path &filename);
 
 	std::string gpu_memory_used();
 

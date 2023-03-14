@@ -3855,6 +3855,132 @@ CudaRenderBufferView Testbed::render_nerf_image(uint32_t image_k) {
 	return render_buffer_view;
 }
 
+void save_camera(fs::path camera_filename, Eigen::Matrix3f K, Eigen::Matrix<float, 3, 4> camera_matrix)
+{
+	FILE* f = native_fopen(camera_filename, "wb");
+	if (!f) {
+		throw std::runtime_error{fmt::format("Failed to open '{}' for writing", 
+			camera_filename.str())};
+	}
+	for (int r = 0; r < camera_matrix.rows(); r++) {
+		for (int c = 0; c < K.cols() + camera_matrix.cols(); c++) {
+			if (c < 3) {
+				fprintf(f, "%.4f%s", K(r, c), " ");
+			}
+			else {
+				fprintf(f, "%.4f%s", camera_matrix(r, c - 3), c == 3 + camera_matrix.cols() - 1? "\n":" ");
+			}
+		}
+	}
+	fclose(f);
+}
+
+
+void save_points(const fs::path &filename, std::vector<NerfPointCloud> points)
+{
+	FILE* f = native_fopen(filename.str(), "wb");
+	if (!f) {
+		throw std::runtime_error{fmt::format("Failed to open '{}' for writing", filename.str())};
+	}
+
+	fprintf(f,
+		"ply\n"
+		"format binary_little_endian 1.0\n"
+		"element vertex %ld\n"
+		"property float x\n"
+		"property float y\n"
+		"property float z\n"
+		"property uchar red\n"
+		"property uchar green\n"
+		"property uchar blue\n"
+		"end_header\n"
+		, points.size()
+	);
+
+	for (size_t i=0; i < points.size(); ++i) {
+		Vector3f p = points[i].pos;
+		uint8_t c8[3] = {
+				(uint8_t)points[i].rgba.x(), 
+				(uint8_t)points[i].rgba.y(), 
+				(uint8_t)points[i].rgba.z()};
+
+		// position
+        fwrite(&p.x(), sizeof(float), 1, f);
+        fwrite(&p.y(), sizeof(float), 1, f);
+        fwrite(&p.z(), sizeof(float), 1, f);
+
+        // color
+        fwrite(&c8[0], sizeof(char), 1, f);
+        fwrite(&c8[1], sizeof(char), 1, f);
+        fwrite(&c8[2], sizeof(char), 1, f);
+	}
+
+	fclose(f);
+}
+
+std::vector<NerfPointCloud> create_points( 
+	Eigen::Vector2i resolution,
+	Eigen::Vector2f focal_length,
+	Eigen::Matrix<float, 3, 4> camera_matrix,
+	CudaRenderBufferView render_result)
+{
+	Eigen::Vector3f camera_fwd = camera_matrix.col(2).normalized();
+
+	uint32_t n_count = resolution.x() * resolution.y();
+	std::vector<NerfPointCloud> cpu_points;
+
+	std::vector<float> image_cpu_depth(n_count);
+	CUDA_CHECK_THROW(cudaMemcpy(
+		image_cpu_depth.data(), 
+		render_result.depth_buffer,
+		n_count * sizeof(float),
+		cudaMemcpyDeviceToHost));
+
+	std::vector<Eigen::Array4f> image_cpu_color(n_count);
+	CUDA_CHECK_THROW(cudaMemcpy(
+		image_cpu_color.data(), 
+		render_result.frame_buffer,
+		n_count * sizeof(Array4f),
+		cudaMemcpyDeviceToHost));
+
+	for (uint32_t v = 0; v < resolution.y(); v++) {
+		for (uint32_t u = 0; u < resolution.x(); u++) {
+			uint32_t i = v * resolution.x() + u;
+			// linear_to_srgb(image_cpu_color[i].w()） < 0.5f -- skip masked color
+			if (linear_to_srgb(image_cpu_color[i].w()) < 0.5f || image_cpu_depth[i] >= MAX_DEPTH())
+				continue;
+			// if (image_cpu_depth[i] >= MAX_DEPTH())
+			// 	continue;
+
+			Vector2f uv = Vector2f{(float)u, 
+				(float)v}.cwiseQuotient(resolution.cast<float>());
+			Ray ray = uv_to_ray(
+				0, // spp
+				uv, // -- 0.94375, 0.40125
+				resolution,
+				focal_length,
+				camera_matrix,
+				Eigen::Vector2f{0.5f, 0.5f} // screen_center
+			);
+			NerfPointCloud pc;
+			// ray.d has been normalized, so simple the following formula
+			// float costheta = ray.d.dot(camera_fwd)/(ray.d.norm() * camera_fwd.norm());
+			float costheta = ray.d.dot(camera_fwd);
+
+			pc.pos = (ray.o + image_cpu_depth[i]/costheta * ray.d).array();
+			pc.rgba.x() = tcnn::clamp(linear_to_srgb(image_cpu_color[i].x()) * 255.0f, 0.0f, 255.0f);
+			pc.rgba.y() = tcnn::clamp(linear_to_srgb(image_cpu_color[i].y()) * 255.0f, 0.0f, 255.0f);
+			pc.rgba.z() = tcnn::clamp(linear_to_srgb(image_cpu_color[i].z()) * 255.0f, 0.0f, 255.0f);
+			// pc.rgba.w() = tcnn::clamp(linear_to_srgb(image_cpu_color[i].w()) * 255.0f, 0.0f, 255.0f);
+			cpu_points.push_back(pc);
+		}
+	}
+	image_cpu_color.clear();
+	image_cpu_depth.clear();
+
+	return cpu_points;
+}
+
 void Testbed::save_nerf_images(const fs::path &dirname) {
 	char buffer[32];
 	auto& ds = m_nerf.training.dataset;
@@ -3871,6 +3997,12 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
 	if (! camera_dirname.is_directory()) {
 		fs::create_directory(camera_dirname);
 	}
+	fs::path point_dirname = dirname/"point";
+	if (! point_dirname.is_directory()) {
+		fs::create_directory(point_dirname);
+	}
+
+	std::vector<NerfPointCloud> all_cpu_points;
 
     auto save_image_logger = tlog::Logger("Saving images ...");
     auto progress = save_image_logger.progress(ds.n_images);
@@ -3883,167 +4015,50 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
 
 		CudaRenderBufferView render_result = render_nerf_image(image_k);
 
+		// image/000001.png
 		fs::path image_filename = image_dirname/base_filename.with_extension("png");
 		save_stbi_gpu(image_filename.str(), m.resolution.x(), m.resolution.y(), 
 				(Array4f *)render_result.frame_buffer);
 
+		// depth/000001.png
 		fs::path depth_filename = depth_dirname/base_filename.with_extension("png");
 		save_depth_gpu(depth_filename.str(), m.resolution.x(), m.resolution.y(), 
 			(float *)render_result.depth_buffer);
 
+		// camera/000001.txt
 		fs::path camera_filename = camera_dirname/base_filename.with_extension("txt");
-		// inline __host__ __device__ Eigen::Matrix3f get_camera_intrinsics(int image_k)
-		// inline __host__ __device__ Eigen::Matrix3f get_camera_extrinsics(int image_k)
 		Eigen::Matrix3f K = Eigen::Matrix3f::Identity();
 		K(0, 0) = m.focal_length.x();
 		K(0, 2) = m.resolution.x()/2.0;
 		K(1, 1) = m.focal_length.y();
 		K(1, 2) = m.resolution.y()/2.0;
-		// Eigen::Matrix<float, 3, 4> Rt = 
-		// 	ds.ngp_matrix_to_nerf(ds.xforms[image_k].start);
-		Eigen::Matrix<float, 3, 4> Rt = ds.xforms[image_k].start;
-		// Eigen::Matrix<float, 3, 4> camera_matrix = K * Rt;
-		FILE* f = native_fopen(camera_filename, "wb");
-		if (!f) {
-			throw std::runtime_error{fmt::format("Failed to open '{}' for writing", 
-				camera_filename.str())};
-		}
-		for (int r = 0; r < Rt.rows(); r++) {
-			for (int c = 0; c < K.cols() + Rt.cols(); c++) {
-				if (c < 3) {
-					fprintf(f, "%.4f%s", K(r, c), " ");
-				}
-				else {
-					fprintf(f, "%.4f%s", Rt(r, c - 3), c == 3 + Rt.cols() - 1? "\n":" ");
-				}
-			}
-		}
-		fclose(f);
+		Eigen::Matrix<float, 3, 4> camera_matrix = ds.xforms[image_k].start;
+		save_camera(camera_filename, K, camera_matrix);
+
+		// point/000001.ply
+		fs::path point_filename = point_dirname/base_filename.with_extension("ply");
+		std::vector<NerfPointCloud> cpu_points = 
+			create_points(m.resolution, m.focal_length, camera_matrix, render_result);
+		save_points(point_filename, cpu_points);
+
+		all_cpu_points.insert(all_cpu_points.end(), cpu_points.begin(), cpu_points.end());
+		cpu_points.clear();
 
         progress.update(image_k);
     }
 
-    save_image_logger.success("OK !");
-}
-
-
-void Testbed::save_nerf_points(const fs::path &filename) {
-	if (m_testbed_mode != ETestbedMode::Nerf) {
-		tlog::warning() << "Save point cloud only for NeRF.";
-		return;
-	}
-
-	auto& ds = m_nerf.training.dataset;
-
-    auto pc_logger = tlog::Logger("Create point cloud ...");
-    auto progress = pc_logger.progress(ds.n_images);
-
-	std::vector<NerfPointCloud> all_cpu_points;
-
-	for (int image_k = 0; image_k < ds.n_images; image_k++) {
-		Eigen::Vector2i resolution = ds.metadata[image_k].resolution;
-		Eigen::Vector2f focal_length = ds.metadata[image_k].focal_length;
-		Eigen::Matrix<float, 3, 4> camera_matrix = ds.xforms[image_k].start;
-		Eigen::Vector3f camera_fwd = camera_matrix.col(2).normalized();
-
-		uint32_t n_count = resolution.x() * resolution.y();
-		CudaRenderBufferView render_result = render_nerf_image(image_k);
-
-		std::vector<float> image_cpu_depth(n_count);
-		CUDA_CHECK_THROW(cudaMemcpy(
-			image_cpu_depth.data(), 
-			render_result.depth_buffer,
-			n_count * sizeof(float),
-			cudaMemcpyDeviceToHost));
-
-		std::vector<Eigen::Array4f> image_cpu_color(n_count);
-		CUDA_CHECK_THROW(cudaMemcpy(
-			image_cpu_color.data(), 
-			render_result.frame_buffer,
-			n_count * sizeof(Array4f),
-			cudaMemcpyDeviceToHost));
-
-		for (uint32_t v = 0; v < resolution.y(); v++) {
-			for (uint32_t u = 0; u < resolution.x(); u++) {
-				uint32_t i = v * resolution.x() + u;
-				// linear_to_srgb(image_cpu_color[i].w()） < 0.5f -- skip masked color
-				if (linear_to_srgb(image_cpu_color[i].w()) < 0.5f || image_cpu_depth[i] >= MAX_DEPTH())
-					continue;
-
-				Vector2f uv = Vector2f{(float)u, 
-					(float)v}.cwiseQuotient(resolution.cast<float>());
-				Ray ray = uv_to_ray(
-					0, // spp
-					uv, // -- 0.94375, 0.40125
-					resolution,
-					focal_length,
-					camera_matrix,
-					Eigen::Vector2f{0.5f, 0.5f} // screen_center
-				);
-				NerfPointCloud pc;
-				// ray.d has been normalized, so simple the following formula
-				// float costheta = ray.d.dot(camera_fwd)/(ray.d.norm() * camera_fwd.norm());
-				float costheta = ray.d.dot(camera_fwd);
-
-				// image_cpu_depth[i] *= focal_length.x(); // depth_scale
-				pc.pos = (ray.o + image_cpu_depth[i]/costheta * ray.d).array();
-				// if (u % 100 == 0 && v % 100 == 0) {
-				// 	std::cout << "ray.o --- " << ray.o << std::endl;
-				// 	std::cout << "depth --- " << image_cpu_depth[i] << std::endl;
-				// 	std::cout << "pc.pos --- " << pc.pos << std::endl;
-				// }
-				pc.rgba = image_cpu_color[i];
-				pc.rgba.x() = linear_to_srgb(pc.rgba.x());
-				pc.rgba.y() = linear_to_srgb(pc.rgba.y());
-				pc.rgba.z() = linear_to_srgb(pc.rgba.z());
-				pc.rgba.w() = linear_to_srgb(pc.rgba.w());
-
-				all_cpu_points.push_back(pc);
-			}
-		}
-        progress.update(image_k);
-	}
-    pc_logger.success("OK !");
-
+    // all points
+	fs::path all_point_filename = dirname/"pc.ply";
 	uint32_t n_elements = all_cpu_points.size();
 	if (n_elements >= 5*1024*1024) {
-		n_elements = 5*1024*1024;
 		std::random_shuffle(all_cpu_points.begin(), all_cpu_points.end());
+		all_cpu_points.resize(5*1024*1024);
 	}
+	save_points(all_point_filename, all_cpu_points);
+	all_cpu_points.clear();
 
-	FILE* f = native_fopen(filename.str(), "wb");
-	if (!f) {
-		throw std::runtime_error{fmt::format("Failed to open '{}' for writing", filename.str())};
-	}
-
-	fprintf(f,
-		"ply\n"
-		"format ascii 1.0\n"
-		"element vertex %u\n"
-		"property float x\n"
-		"property float y\n"
-		"property float z\n"
-		"property uchar red\n"
-		"property uchar green\n"
-		"property uchar blue\n"
-		"end_header\n"
-		, n_elements
-	);
-
-	for (size_t i=0; i < n_elements; ++i) {
-		Vector3f p = all_cpu_points[i].pos;
-		Array4f c = all_cpu_points[i].rgba * 255.0f;
-		uint8_t c8[3] = { (uint8_t)c.x(), (uint8_t)c.y(), (uint8_t)c.z()};
-		fprintf(f, "%0.3f %0.3f %0.3f %d %d %d\n",
-			p.x(), p.y(), p.z(), 
-			c8[0], c8[1], c8[2]);
-	}
-
-	fclose(f);
-
-	tlog::success() << n_elements << "/" << all_cpu_points.size() <<  "points saved to " << filename << " ...";
+    save_image_logger.success("OK !");
 }
-
 
 NGP_NAMESPACE_END
 

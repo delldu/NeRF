@@ -143,25 +143,11 @@ int main_func(const std::vector<std::string>& arguments) {
 		{"save_model"},
 	};
 
-	Flag save_mesh_flag{
+	Flag save_render_result_flag{
 		parser,
-		"SAVE_MESH",
-		"Save mesh to output/mesh.obj for NeRF or SDF.",
-		{"save_mesh"},
-	};
-
-	Flag save_images_flag{
-		parser,
-		"SAVE_IMAGES",
-		"Save image/depth/camera to output for NeRF.",
-		{"save_images"},
-	};
-
-	Flag save_points_flag{
-		parser,
-		"SAVE_POINTS",
-		"Save point cloud to output/pc.ply for NeRF.",
-		{"save_points"},
+		"SAVE_RENDER_RESULT",
+		"Save render result (image/depth/camera/point/mesh) to output for NeRF.",
+		{"save_render_result"},
 	};
 
 	Flag no_train_flag{
@@ -293,8 +279,7 @@ int main_func(const std::vector<std::string>& arguments) {
 	}
 
 	fs::path output_dir = "output";
-	if (output_dir_flag || save_model_flag || save_images_flag || save_mesh_flag 
-		|| save_points_flag) {
+	if (output_dir_flag || save_model_flag || save_render_result_flag) {
 		output_dir = output_dir_flag ? get(output_dir_flag) : "output";
 		if (! output_dir.is_directory()) {
 			fs::create_directory(output_dir);
@@ -306,32 +291,16 @@ int main_func(const std::vector<std::string>& arguments) {
 		testbed.save_snapshot(filename, false /*include_optimizer_state*/);
 	}
 
-	if (save_mesh_flag) {
-		if (testbed.m_testbed_mode != ETestbedMode::Nerf && 
-			testbed.m_testbed_mode != ETestbedMode::Sdf) {
-			tlog::warning() << "Save mesh only for NeRF or SDF.";
+	if (save_render_result_flag) {
+		if (testbed.m_testbed_mode != ETestbedMode::Nerf) {
+			tlog::warning() << "Render images/depth/points/mesh only for NeRF.";
 		} else {
 		    fs::path filename = output_dir/"mesh.obj";
 			float thresh = (testbed.m_testbed_mode == ETestbedMode::Nerf)? 2.5f : 0.0f;
 			testbed.compute_and_save_marching_cubes_mesh(filename.str().c_str(),
 				Eigen::Vector3i{256, 256, 256}, {} /*BoundingBox*/, thresh, false /*uv_flag*/);
-		}
-	}
 
-	if (save_images_flag) {
-		if (testbed.m_testbed_mode != ETestbedMode::Nerf) {
-			tlog::warning() << "Render images/depth only for NeRF.";
-		} else {
 			testbed.save_nerf_images(output_dir);
-		}
-	}
-
-	if (save_points_flag) {
-		if (testbed.m_testbed_mode != ETestbedMode::Nerf) {
-			tlog::warning() << "Save point cloud only for NeRF.";
-		} else {
-		    fs::path filename = output_dir/"pc.ply";
-			testbed.save_nerf_points(filename);
 		}
 	}
 
