@@ -109,6 +109,7 @@ struct NerfCoordinate {
 
 struct NerfPointCloud {
 	Eigen::Array3f pos;		// pos
+	Eigen::Array3f norm;	// vertex normal
 	Eigen::Array4f rgba;	// rgba.w() for color filter
 };
 

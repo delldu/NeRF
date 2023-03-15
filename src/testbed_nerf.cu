@@ -3875,50 +3875,7 @@ void save_camera(fs::path camera_filename, Eigen::Matrix3f K, Eigen::Matrix<floa
 	fclose(f);
 }
 
-
-void save_points(const fs::path &filename, std::vector<NerfPointCloud> points)
-{
-	FILE* f = native_fopen(filename.str(), "wb");
-	if (!f) {
-		throw std::runtime_error{fmt::format("Failed to open '{}' for writing", filename.str())};
-	}
-
-	fprintf(f,
-		"ply\n"
-		"format binary_little_endian 1.0\n"
-		"element vertex %ld\n"
-		"property float x\n"
-		"property float y\n"
-		"property float z\n"
-		"property uchar red\n"
-		"property uchar green\n"
-		"property uchar blue\n"
-		"end_header\n"
-		, points.size()
-	);
-
-	for (size_t i=0; i < points.size(); ++i) {
-		Vector3f p = points[i].pos;
-		uint8_t c8[3] = {
-				(uint8_t)points[i].rgba.x(), 
-				(uint8_t)points[i].rgba.y(), 
-				(uint8_t)points[i].rgba.z()};
-
-		// position
-        fwrite(&p.x(), sizeof(float), 1, f);
-        fwrite(&p.y(), sizeof(float), 1, f);
-        fwrite(&p.z(), sizeof(float), 1, f);
-
-        // color
-        fwrite(&c8[0], sizeof(char), 1, f);
-        fwrite(&c8[1], sizeof(char), 1, f);
-        fwrite(&c8[2], sizeof(char), 1, f);
-	}
-
-	fclose(f);
-}
-
-std::vector<NerfPointCloud> create_points( 
+std::vector<NerfPointCloud> create_points(
 	Eigen::Vector2i resolution,
 	Eigen::Vector2f focal_length,
 	Eigen::Matrix<float, 3, 4> camera_matrix,
@@ -3968,6 +3925,7 @@ std::vector<NerfPointCloud> create_points(
 			float costheta = ray.d.dot(camera_fwd);
 
 			pc.pos = (ray.o + image_cpu_depth[i]/costheta * ray.d).array();
+			pc.norm = ray.d.normalized();
 			pc.rgba.x() = tcnn::clamp(linear_to_srgb(image_cpu_color[i].x()) * 255.0f, 0.0f, 255.0f);
 			pc.rgba.y() = tcnn::clamp(linear_to_srgb(image_cpu_color[i].y()) * 255.0f, 0.0f, 255.0f);
 			pc.rgba.z() = tcnn::clamp(linear_to_srgb(image_cpu_color[i].z()) * 255.0f, 0.0f, 255.0f);
@@ -3975,11 +3933,64 @@ std::vector<NerfPointCloud> create_points(
 			cpu_points.push_back(pc);
 		}
 	}
+
 	image_cpu_color.clear();
 	image_cpu_depth.clear();
 
 	return cpu_points;
 }
+
+void save_points(const fs::path &filename, std::vector<NerfPointCloud> points)
+{
+	FILE* f = native_fopen(filename.str(), "wb");
+	if (!f) {
+		throw std::runtime_error{fmt::format("Failed to open '{}' for writing", filename.str())};
+	}
+
+	fprintf(f,
+		"ply\n"
+		"format binary_little_endian 1.0\n"
+		"element vertex %ld\n"
+		"property float x\n"
+		"property float y\n"
+		"property float z\n"
+		"property float nx\n"
+		"property float ny\n"
+		"property float nz\n"
+		"property uchar red\n"
+		"property uchar green\n"
+		"property uchar blue\n"
+		"end_header\n"
+		, points.size()
+	);
+
+	for (size_t i=0; i < points.size(); ++i) {
+		Vector3f p = points[i].pos;
+		Vector3f n = points[i].norm;
+		uint8_t c8[3] = {
+				(uint8_t)points[i].rgba.x(), 
+				(uint8_t)points[i].rgba.y(), 
+				(uint8_t)points[i].rgba.z()};
+
+		// position
+        fwrite(&p.x(), sizeof(float), 1, f);
+        fwrite(&p.y(), sizeof(float), 1, f);
+        fwrite(&p.z(), sizeof(float), 1, f);
+
+        // normal
+        fwrite(&n.x(), sizeof(float), 1, f);
+        fwrite(&n.y(), sizeof(float), 1, f);
+        fwrite(&n.z(), sizeof(float), 1, f);
+
+        // color
+        fwrite(&c8[0], sizeof(char), 1, f);
+        fwrite(&c8[1], sizeof(char), 1, f);
+        fwrite(&c8[2], sizeof(char), 1, f);
+	}
+
+	fclose(f);
+}
+
 
 void Testbed::save_nerf_images(const fs::path &dirname) {
 	char buffer[32];
@@ -4050,9 +4061,10 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
     // all points
 	fs::path all_point_filename = dirname/"pc.ply";
 	uint32_t n_elements = all_cpu_points.size();
-	if (n_elements >= 5*1024*1024) {
+	if (n_elements >= 2*1024*1024) {
 		std::random_shuffle(all_cpu_points.begin(), all_cpu_points.end());
-		all_cpu_points.resize(5*1024*1024);
+		all_cpu_points.resize(2*1024*1024);
+		std::cout << "Point cloud been truncated from " << all_cpu_points.size() << " points to 2M" << std::endl;
 	}
 	save_points(all_point_filename, all_cpu_points);
 	all_cpu_points.clear();
