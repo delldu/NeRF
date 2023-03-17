@@ -87,6 +87,13 @@ struct BoundingBox {
 		return (pos - min).cwiseQuotient(diag());
 	}
 
+	NGP_HOST_DEVICE Eigen::Vector3i index_pos(const int N, const Eigen::Vector3f& pos) const {
+		Eigen::Vector3f temp = N * (pos - min).cwiseQuotient(diag());
+		// Make sure return value in [0, N - 1) via application
+		return Eigen::Vector3i {(int)(temp.x() + 0.5f), (int)(temp.y() + 0.5f), (int)(temp.z() + 0.5f)};
+	}
+
+
 	NGP_HOST_DEVICE Eigen::Vector3f center() const {
 		return 0.5f * (max + min);
 	}

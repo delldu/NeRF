@@ -296,7 +296,7 @@ int main_func(const std::vector<std::string>& arguments) {
 			tlog::warning() << "Render images/depth/points/mesh only for NeRF.";
 		} else {
 		    fs::path filename = output_dir/"mesh.obj";
-			float thresh = (testbed.m_testbed_mode == ETestbedMode::Nerf)? 2.5f : 0.0f;
+			float thresh = 2.5f; // (testbed.m_testbed_mode == ETestbedMode::Nerf)? 2.5f : 0.0f;
 			testbed.compute_and_save_marching_cubes_mesh(filename.str().c_str(),
 				Eigen::Vector3i{256, 256, 256}, {} /*BoundingBox*/, thresh, false /*uv_flag*/);
 

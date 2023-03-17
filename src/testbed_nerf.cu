@@ -64,7 +64,9 @@ static constexpr uint32_t MARCH_ITER = 10000;
 
 static constexpr uint32_t MIN_STEPS_INBETWEEN_COMPACTION = 1;
 static constexpr uint32_t MAX_STEPS_INBETWEEN_COMPACTION = 8;
-
+#define PC_BBOX_SIZE 1.5f
+#define PC_MAX_POINT (5*1024*1024)
+#define PC_GRID_SIZE 1024 // MAX must be <= 1024
 
 Testbed::NetworkDims Testbed::network_dims_nerf() const {
 	NetworkDims dims;
@@ -3900,6 +3902,9 @@ std::vector<NerfPointCloud> create_points(
 		n_count * sizeof(Array4f),
 		cudaMemcpyDeviceToHost));
 
+	const BoundingBox PC_BBOX(Eigen::Vector3f{-PC_BBOX_SIZE, -PC_BBOX_SIZE, -PC_BBOX_SIZE},
+			Eigen::Vector3f{PC_BBOX_SIZE, PC_BBOX_SIZE, PC_BBOX_SIZE});
+
 	for (uint32_t v = 0; v < resolution.y(); v++) {
 		for (uint32_t u = 0; u < resolution.x(); u++) {
 			uint32_t i = v * resolution.x() + u;
@@ -3925,7 +3930,10 @@ std::vector<NerfPointCloud> create_points(
 			float costheta = ray.d.dot(camera_fwd);
 
 			pc.pos = (ray.o + image_cpu_depth[i]/costheta * ray.d).array();
-			pc.norm = ray.d.normalized();
+			if (! PC_BBOX.contains(pc.pos))
+				continue;
+
+			// pc.norm = ray.d.normalized();
 			pc.rgba.x() = tcnn::clamp(linear_to_srgb(image_cpu_color[i].x()) * 255.0f, 0.0f, 255.0f);
 			pc.rgba.y() = tcnn::clamp(linear_to_srgb(image_cpu_color[i].y()) * 255.0f, 0.0f, 255.0f);
 			pc.rgba.z() = tcnn::clamp(linear_to_srgb(image_cpu_color[i].z()) * 255.0f, 0.0f, 255.0f);
@@ -3954,9 +3962,9 @@ void save_points(const fs::path &filename, std::vector<NerfPointCloud> points)
 		"property float x\n"
 		"property float y\n"
 		"property float z\n"
-		"property float nx\n"
-		"property float ny\n"
-		"property float nz\n"
+		// "property float nx\n"
+		// "property float ny\n"
+		// "property float nz\n"
 		"property uchar red\n"
 		"property uchar green\n"
 		"property uchar blue\n"
@@ -3966,7 +3974,7 @@ void save_points(const fs::path &filename, std::vector<NerfPointCloud> points)
 
 	for (size_t i=0; i < points.size(); ++i) {
 		Vector3f p = points[i].pos;
-		Vector3f n = points[i].norm;
+		// Vector3f n = points[i].norm;
 		uint8_t c8[3] = {
 				(uint8_t)points[i].rgba.x(), 
 				(uint8_t)points[i].rgba.y(), 
@@ -3978,9 +3986,9 @@ void save_points(const fs::path &filename, std::vector<NerfPointCloud> points)
         fwrite(&p.z(), sizeof(float), 1, f);
 
         // normal
-        fwrite(&n.x(), sizeof(float), 1, f);
-        fwrite(&n.y(), sizeof(float), 1, f);
-        fwrite(&n.z(), sizeof(float), 1, f);
+        // fwrite(&n.x(), sizeof(float), 1, f);
+        // fwrite(&n.y(), sizeof(float), 1, f);
+        // fwrite(&n.z(), sizeof(float), 1, f);
 
         // color
         fwrite(&c8[0], sizeof(char), 1, f);
@@ -4013,7 +4021,11 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
 		fs::create_directory(point_dirname);
 	}
 
-	std::vector<NerfPointCloud> all_cpu_points;
+
+	std::map<uint32_t, int> pc_count;
+	std::map<uint32_t, NerfPointCloud> pc_value;
+	const BoundingBox PC_BBOX(Eigen::Vector3f{-PC_BBOX_SIZE, -PC_BBOX_SIZE, -PC_BBOX_SIZE},
+		Eigen::Vector3f{PC_BBOX_SIZE, PC_BBOX_SIZE, PC_BBOX_SIZE});
 
     auto save_image_logger = tlog::Logger("Saving images ...");
     auto progress = save_image_logger.progress(ds.n_images);
@@ -4052,22 +4064,59 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
 			create_points(m.resolution, m.focal_length, camera_matrix, render_result);
 		save_points(point_filename, cpu_points);
 
-		all_cpu_points.insert(all_cpu_points.end(), cpu_points.begin(), cpu_points.end());
+		for (uint32_t j = 0 ; j < cpu_points.size(); j++) {
+			NerfPointCloud pc = cpu_points[j];
+			if (! PC_BBOX.contains(pc.pos))
+				continue;
+			Eigen::Vector3i ijk = PC_BBOX.index_pos(PC_GRID_SIZE, pc.pos);
+			if (ijk.x() >= PC_GRID_SIZE || ijk.y() >= PC_GRID_SIZE || ijk.z() >= PC_GRID_SIZE)
+				continue;
+
+			uint32_t key = (ijk.x() << 20) | (ijk.y() << 10) | ijk.z();
+			if (pc_count.find(key) != pc_count.end()) {
+				pc_count[key] = pc_count[key] + 1;
+				// add
+				pc_value[key].pos += pc.pos;
+				pc_value[key].rgba += pc.rgba;
+			} else {
+				pc_count[key] = 1;
+				pc_value[key].pos = pc.pos;
+				pc_value[key].rgba = pc.rgba;
+			}
+		}
+
 		cpu_points.clear();
 
         progress.update(image_k);
     }
 
+	for (auto it = pc_count.begin(); it != pc_count.end(); it++) {
+		uint32_t key = it->first;
+		int count = it->second;
+		if (count > 0 && pc_value.find(key) != pc_value.end()) { // sure !!!
+			pc_value[key].pos = pc_value[key].pos/(float)count;
+			pc_value[key].rgba = pc_value[key].rgba/(float)count;
+		}
+	}
+
+	std::vector<NerfPointCloud> all_cpu_points;
+	for (auto it = pc_value.begin(); it != pc_value.end(); it++) {
+		all_cpu_points.push_back(it->second);
+	}
+	pc_count.clear();
+	pc_value.clear();
+
     // all points
 	fs::path all_point_filename = dirname/"pc.ply";
 	uint32_t n_elements = all_cpu_points.size();
-	if (n_elements >= 2*1024*1024) {
+	if (n_elements >= PC_MAX_POINT) {
 		std::random_shuffle(all_cpu_points.begin(), all_cpu_points.end());
-		all_cpu_points.resize(2*1024*1024);
-		std::cout << "Point cloud been truncated from " << all_cpu_points.size() << " points to 2M" << std::endl;
+		all_cpu_points.resize(PC_MAX_POINT);
+		std::cout << "Point cloud been truncated from " << all_cpu_points.size() << " points" << std::endl;
 	}
 	save_points(all_point_filename, all_cpu_points);
 	all_cpu_points.clear();
+	std::cout << "Save point cloud to file " << all_point_filename << std::endl;
 
     save_image_logger.success("OK !");
 }
