@@ -8,5 +8,8 @@
 #
 #! /bin/sh
 
-./instant-ngp data/nerf/lego/transforms_train.json --load_model=/tmp/lego.msgpack \
+# ./instant-ngp data/nerf/lego/transforms_train.json --load_model=/tmp/lego.msgpack \
+#     --save_render_result --output lego_output
+
+./instant-ngp data/nerf/lego --load_model=/tmp/lego.msgpack \
     --save_render_result --output lego_output

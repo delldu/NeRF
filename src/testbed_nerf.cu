@@ -4024,7 +4024,7 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
 
 	std::map<uint32_t, int> pc_count;
 	std::map<uint32_t, NerfPointCloud> pc_value;
-	const BoundingBox PC_BBOX(Eigen::Vector3f{-PC_BBOX_SIZE, -PC_BBOX_SIZE, -PC_BBOX_SIZE},
+	BoundingBox PC_BBOX(Eigen::Vector3f{-PC_BBOX_SIZE, -PC_BBOX_SIZE, -PC_BBOX_SIZE},
 		Eigen::Vector3f{PC_BBOX_SIZE, PC_BBOX_SIZE, PC_BBOX_SIZE});
 
     auto save_image_logger = tlog::Logger("Saving images ...");
@@ -4093,7 +4093,7 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
 	for (auto it = pc_count.begin(); it != pc_count.end(); it++) {
 		uint32_t key = it->first;
 		int count = it->second;
-		if (count > 0 && pc_value.find(key) != pc_value.end()) { // sure !!!
+		if (count > 1 && pc_value.find(key) != pc_value.end()) { // sure !!!
 			pc_value[key].pos = pc_value[key].pos/(float)count;
 			pc_value[key].rgba = pc_value[key].rgba/(float)count;
 		}
@@ -4101,7 +4101,15 @@ void Testbed::save_nerf_images(const fs::path &dirname) {
 
 	std::vector<NerfPointCloud> all_cpu_points;
 	for (auto it = pc_value.begin(); it != pc_value.end(); it++) {
+#if 0		
+		// auto count_it = pc_count.find(it->first);
+
+		// if (count_it != pc_count.end() && count_it->second >= 2) { // two count !!!
+		// 	all_cpu_points.push_back(it->second);
+		// }
+#else
 		all_cpu_points.push_back(it->second);
+#endif		
 	}
 	pc_count.clear();
 	pc_value.clear();
